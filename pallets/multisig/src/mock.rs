@@ -73,10 +73,29 @@ impl pallet_multisig::Config for Test {
 	type NativeBalance = Balances;
 	type RuntimeCall = RuntimeCall;
 	type MaxOwners = ConstU32<50>; // TODO: review
+	type Currency = Balances;
+	type MultisigDepositBase = ConstU128<100>;
+	type MultisigDepositFactor = ConstU128<50>;
 }
 
 pub fn new_test_ext() -> sp_io::TestExternalities {
 	// learn how to improve your test setup:
-	// https://paritytech.github.io/polkadot-sdk/master/polkadot_sdk_docs/guides/your_first_pallet/index.html
-	frame_system::GenesisConfig::<Test>::default().build_storage().unwrap().into()
+    // https://paritytech.github.io/polkadot-sdk/master/polkadot_sdk_docs/guides/your_first_pallet/index.html
+    // frame_system::GenesisConfig::<Test>::default().build_storage().unwrap().into() // TODO: read from genesis config
+	let mut t = frame_system::GenesisConfig::<Test>::default()
+		.build_storage()
+		.unwrap();
+	
+	// Set up initial balances for test accounts
+	pallet_balances::GenesisConfig::<Test> {
+		balances: vec![
+			(1, 1000),
+			(2, 1000),
+			(3, 1000),
+		],
+	}
+	.assimilate_storage(&mut t)
+	.unwrap();
+
+	t.into()
 }

@@ -19,16 +19,16 @@ pub mod pallet {
 	use frame_support::{
 		dispatch::{GetDispatchInfo, RawOrigin},
 		pallet_prelude::*,
-		traits::fungible,
+		traits::{fungible, ReservableCurrency, Currency},
 	};
 	use frame_system::pallet_prelude::*;
 	use sp_io::hashing::blake2_256;
-	use sp_runtime::traits::{Dispatchable, TrailingZeroInput};
+	use sp_runtime::traits::{Dispatchable, TrailingZeroInput, CheckedAdd, CheckedMul};
 	use sp_std::prelude::*;
+	use sp_std::collections::btree_set::BTreeSet;
+	// use sp_arithmetic::traits::{Arithmetic, Saturating};
 
-	pub type BalanceOf<T> = <<T as Config>::NativeBalance as fungible::Inspect<
-		<T as frame_system::Config>::AccountId,
-	>>::Balance;
+	pub type BalanceOf<T> = <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance; // TODO: review if its good idea to change from Nativebalance to Currency
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -48,6 +48,9 @@ pub mod pallet {
 			+ fungible::freeze::Inspect<Self::AccountId>
 			+ fungible::freeze::Mutate<Self::AccountId>;
 
+		/// The currency mechanism, used for paying for reserves.
+		type Currency: ReservableCurrency<Self::AccountId>;
+		
 		/// A type representing all calls available in your runtime.
 		/// https://paritytech.github.io/polkadot-sdk/master/polkadot_sdk_docs/reference_docs/frame_runtime_types/index.html
 		type RuntimeCall: Parameter
@@ -56,7 +59,15 @@ pub mod pallet {
 
 		/// The maximum number of owners per multisig.
 		#[pallet::constant]
-		type MaxOwners: Get<u32>;  // TODO: review
+		type MaxOwners: Get<u32>; // TODO: review
+
+		/// Base deposit for creating a multisig
+		#[pallet::constant]
+		type MultisigDepositBase: Get<BalanceOf<Self>>;
+
+		/// Deposit factor per owner
+		#[pallet::constant]
+		type MultisigDepositFactor: Get<BalanceOf<Self>>;
 	}
 
 	/// A multisig wallet and its configuration
@@ -91,6 +102,22 @@ pub mod pallet {
 	#[pallet::storage]
 	pub type SomethingMap<T: Config> = StorageMap<Key = T::AccountId, Value = BlockNumberFor<T>>;
 
+	#[pallet::storage]
+	pub type Multisigs<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, Multisig<T>>;
+
+	#[pallet::storage]
+	pub type LastMultisigSeed<T> = StorageValue<_, u32, ValueQuery>;
+
+	#[pallet::storage]
+	pub type MultisigOwners<T: Config> = StorageDoubleMap<
+		_,
+		Twox64Concat,
+		T::AccountId, // Multisig account ID
+		Twox64Concat,
+		T::AccountId, // Owner account ID
+		bool,
+	>;
+
 	/// Pallets use events to inform users when important changes are made.
 	/// https://paritytech.github.io/polkadot-sdk/master/polkadot_sdk_docs/guides/your_first_pallet/index.html#event-and-error
 	#[pallet::event]
@@ -98,6 +125,8 @@ pub mod pallet {
 	pub enum Event<T: Config> {
 		/// We usually use passive tense for events.
 		SomethingStored { something: u32, who: T::AccountId },
+		/// A new multisig was created
+		MultisigCreated { multisig: T::AccountId, creator: T::AccountId, threshold: u32 },
 	}
 
 	/// Errors inform users that something went wrong.
@@ -108,6 +137,14 @@ pub mod pallet {
 		NoneValue,
 		/// Errors should have helpful documentation associated with them.
 		StorageOverflow,
+		/// Threshold must be greater than 0 and less than or equal to the number of owners
+		InvalidThreshold,
+		/// Too many owners in the multisig
+		TooManyOwners,
+		/// Owner already exists in the multisig or duplicate owners provided
+		AlreadyOwner,
+		/// Failed to reserve deposit
+		FailedToReserveDeposit,
 	}
 
 	/// Dispatchable functions allows users to interact with the pallet and invoke state changes.
@@ -116,6 +153,7 @@ pub mod pallet {
 	/// https://paritytech.github.io/polkadot-sdk/master/polkadot_sdk_docs/guides/your_first_pallet/index.html#dispatchables
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
+
 		/// An example dispatchable that takes a singles value as a parameter, writes the value to
 		/// storage and emits an event. This function must be dispatched by a signed extrinsic.
 		pub fn do_something(origin: OriginFor<T>, something: u32) -> DispatchResult {
@@ -164,6 +202,71 @@ pub mod pallet {
 			// Turn the result from the `dispatch` into our expected `DispatchResult` type.
 			res.map(|_| ()).map_err(|e| e.error)
 		}
+
+		/// Create a new multisig wallet
+		// #[pallet::weight(T::WeightInfo::create_multisig(owners.len() as u32))]
+		pub fn create_multisig(
+			origin: OriginFor<T>,
+			owners: Vec<T::AccountId>,
+			threshold: u32,
+		) -> DispatchResult {
+			let creator = ensure_signed(origin)?;
+			
+			// Ensure valid parameters
+			ensure!(!owners.is_empty(), Error::<T>::InvalidThreshold);
+			ensure!(
+				owners.len() <= T::MaxOwners::get() as usize,
+				Error::<T>::TooManyOwners
+			);
+			ensure!(
+				threshold > 0 && threshold <= owners.len() as u32,
+				Error::<T>::InvalidThreshold
+			);
+			
+			// Ensure owner uniqueness
+			let mut unique_owners = BTreeSet::new();
+			for owner in owners.iter() {
+				ensure!(unique_owners.insert(owner.clone()), Error::<T>::AlreadyOwner);
+			}
+			
+			// Generate a unique address for the multisig
+			let seed = LastMultisigSeed::<T>::get();
+			let multisig_account = Self::multi_account_id(seed);
+			LastMultisigSeed::<T>::put(seed + 1);
+			
+			// Calculate and reserve the deposit
+			let deposit = Self::calculate_deposit(owners.len() as u32)?;
+			T::Currency::reserve(&creator, deposit)
+				.map_err(|_| Error::<T>::FailedToReserveDeposit)?;
+			
+			// Create the multisig
+			let owners_bounded = BoundedVec::<T::AccountId, T::MaxOwners>::try_from(owners)
+				.map_err(|_| Error::<T>::TooManyOwners)?;
+			
+			let multisig = Multisig {
+				account_id: multisig_account.clone(),
+				owners: owners_bounded.clone(),
+				required: threshold,
+				transaction_count: 0,
+			};
+			
+			// Store the multisig
+			<Multisigs<T>>::insert(&multisig_account, multisig);
+			
+			// Store owner mappings
+			for owner in owners_bounded.iter() {
+				<MultisigOwners<T>>::insert(&multisig_account, owner, true);
+			}
+			
+			// Emit creation event
+			Self::deposit_event(Event::MultisigCreated {
+				multisig: multisig_account,
+				creator,
+				threshold,
+			});
+			
+			Ok(())
+		}
 	}
 
 	impl<T: Config> Pallet<T> {
@@ -172,6 +275,16 @@ pub mod pallet {
 			let entropy = (b"pba/multisig", seed).using_encoded(blake2_256);
 			Decode::decode(&mut TrailingZeroInput::new(entropy.as_ref()))
 				.expect("infinite length input; no invalid inputs for type; qed")
+		}
+
+		/// Calculate the deposit required for a multisig wallet
+		fn calculate_deposit(num_owners: u32) -> Result<BalanceOf<T>, Error<T>> {
+			let base = T::MultisigDepositBase::get();
+			let factor = T::MultisigDepositFactor::get();
+			let factor_mul = factor.checked_mul(&num_owners.into())
+				.ok_or(Error::<T>::StorageOverflow)?; // TODO: review the error
+			base.checked_add(&factor_mul)
+				.ok_or(Error::<T>::StorageOverflow)
 		}
 	}
 }
