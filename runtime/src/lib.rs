@@ -178,6 +178,7 @@ impl pallet_multisig::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type NativeBalance = Balances;
 	type RuntimeCall = RuntimeCall;
+	type MaxOwners = ConstU32<50>; // TODO: review
 }
 
 /// Configure the pallet-free-tx in pallets/free-tx.

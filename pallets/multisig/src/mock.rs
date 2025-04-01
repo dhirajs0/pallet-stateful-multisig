@@ -72,6 +72,7 @@ impl pallet_multisig::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type NativeBalance = Balances;
 	type RuntimeCall = RuntimeCall;
+	type MaxOwners = ConstU32<50>; // TODO: review
 }
 
 pub fn new_test_ext() -> sp_io::TestExternalities {

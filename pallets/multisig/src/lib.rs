@@ -53,6 +53,34 @@ pub mod pallet {
 		type RuntimeCall: Parameter
 			+ Dispatchable<RuntimeOrigin = Self::RuntimeOrigin>
 			+ GetDispatchInfo;
+
+		/// The maximum number of owners per multisig.
+		#[pallet::constant]
+		type MaxOwners: Get<u32>;  // TODO: review
+	}
+
+	/// A multisig wallet and its configuration
+	#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, MaxEncodedLen, TypeInfo)]
+	#[scale_info(skip_type_params(T))]
+	pub struct Multisig<T: Config> {
+		/// The multisig account ID
+		pub account_id: T::AccountId,
+		/// The list of owners
+		pub owners: BoundedVec<T::AccountId, T::MaxOwners>,
+		/// Number of required confirmations
+		pub required: u32,
+		/// Transaction count
+		pub transaction_count: u32,
+	}
+
+	/// A transaction proposal in a multisig
+	#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, MaxEncodedLen, TypeInfo)]
+	#[scale_info(skip_type_params(T))]
+	pub struct Transaction<T: Config> {
+		/// The encoded call to be dispatched
+		pub call: <T as Config>::RuntimeCall,
+		/// True if the transaction has been executed
+		pub executed: bool,
 	}
 
 	/// The pallet's storage items.
