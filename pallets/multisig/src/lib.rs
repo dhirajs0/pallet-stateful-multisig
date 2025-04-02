@@ -80,7 +80,7 @@ pub mod pallet {
 	}
 
 	/// A multisig wallet and its configuration
-	#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, MaxEncodedLen, TypeInfo)]
+	#[derive(Encode, Decode, Eq, PartialEq, RuntimeDebug, MaxEncodedLen, TypeInfo)]
 	#[scale_info(skip_type_params(T))]
 	pub struct Multisig<T: Config> {
 		/// The multisig account ID
@@ -91,6 +91,18 @@ pub mod pallet {
 		pub required: u32,
 		/// Transaction count
 		pub transaction_count: u32,
+	}
+
+	// Implement Clone manually to ensure proper trait bounds
+	impl<T: Config> Clone for Multisig<T> {
+		fn clone(&self) -> Self {
+			Self {
+				account_id: self.account_id.clone(),
+				owners: self.owners.clone(),
+				required: self.required,
+				transaction_count: self.transaction_count,
+			}
+		}
 	}
 
 	/// A transaction proposal in a multisig
@@ -166,8 +178,10 @@ pub mod pallet {
 		TransactionConfirmed { multisig: T::AccountId, transaction_id: u32, signer: T::AccountId },
 		/// A transaction was executed
 		TransactionExecuted { multisig: T::AccountId, transaction_id: u32, result: DispatchResult },
-		/// A confirmation was revoked by an owner
-		ConfirmationRevoked { multisig: T::AccountId, transaction_id: u32, signer: T::AccountId },
+		/// A transaction was signed by an owner
+		TransactionSigned { multisig: T::AccountId, transaction_id: u32, signer: T::AccountId },
+		/// A transaction was unsigned by an owner
+		TransactionUnsigned { multisig: T::AccountId, transaction_id: u32, signer: T::AccountId }
 	}
 
 	/// Errors inform users that something went wrong.
@@ -262,11 +276,11 @@ pub mod pallet {
 			owners: Vec<T::AccountId>,
 			threshold: u32,
 		) -> DispatchResult {
+			// ensure signed
 			let creator = ensure_signed(origin)?;
 
 			// Ensure valid parameters
 			ensure!(!owners.is_empty(), Error::<T>::InvalidThreshold);
-			ensure!(owners.len() <= T::MaxOwners::get() as usize, Error::<T>::TooManyOwners);
 			ensure!(owners.len() <= T::MaxOwners::get() as usize, Error::<T>::TooManyOwners);
 			ensure!(
 				threshold > 0 && threshold <= owners.len() as u32,
@@ -284,7 +298,7 @@ pub mod pallet {
 			let multisig_account = Self::multi_account_id(seed);
 			LastMultisigSeed::<T>::put(seed + 1);
 
-			// Calculate and reserve the deposit
+			// Calculate and hold the deposit
 			let deposit = Self::calculate_deposit(owners.len() as u32)?;
 			T::NativeBalance::hold(&HoldReason::Multisig, &creator, deposit)
 				.map_err(|_| Error::<T>::FailedToReserveDeposit)?;
@@ -334,7 +348,8 @@ pub mod pallet {
 			ensure!(<MultisigOwners<T>>::contains_key(&multisig, &who), Error::<T>::NotOwner);
 
 			// Create transaction ID and store transaction
-			let transaction_id = multisig_data.transaction_count;
+			let transaction_id = multisig_data.transaction_count; // TODO: change to u128
+			// Increment transaction count
 			multisig_data.transaction_count = multisig_data
 				.transaction_count
 				.checked_add(1)
@@ -342,8 +357,10 @@ pub mod pallet {
 
 			let transaction = Transaction { call: *call, executed: false };
 
+			// Store transaction
 			<Transactions<T>>::insert(&multisig, transaction_id, transaction);
-			<Multisigs<T>>::insert(&multisig, multisig_data);
+			// Store multisig with updated transaction count
+			<Multisigs<T>>::insert(&multisig, multisig_data.clone());
 
 			// Automatically confirm the transaction for the submitter
 			<Confirmations<T>>::insert(&multisig, (transaction_id, who.clone()), true);
@@ -354,11 +371,25 @@ pub mod pallet {
 				transaction_id,
 				submitter: who.clone(),
 			});
-
-			Self::deposit_event(Event::TransactionConfirmed {
-				multisig,
+			// TransactionSigned event is emitted 
+			Self::deposit_event(Event::TransactionSigned {
+				multisig: multisig.clone(),
 				transaction_id,
-				signer: who,
+				signer: who.clone(),
+			});
+
+			// Check if we have enough confirmations to execute
+			let confirmation_count = Self::count_confirmations(&multisig, transaction_id);
+
+			if confirmation_count >= multisig_data.required {
+				Self::do_execute_transaction(&multisig, transaction_id)?;
+			}
+
+			// Emit confirmation event
+			Self::deposit_event(Event::TransactionConfirmed {
+				multisig: multisig.clone(),
+				transaction_id,
+				signer: who.clone(),
 			});
 
 			Ok(())
@@ -394,7 +425,7 @@ pub mod pallet {
 			<Confirmations<T>>::insert(&multisig, (transaction_id, who.clone()), true);
 
 			// Emit confirmation event
-			Self::deposit_event(Event::TransactionConfirmed {
+			Self::deposit_event(Event::TransactionSigned {
 				multisig: multisig.clone(),
 				transaction_id,
 				signer: who.clone(),
@@ -406,6 +437,13 @@ pub mod pallet {
 			if confirmation_count >= multisig_data.required {
 				Self::do_execute_transaction(&multisig, transaction_id)?;
 			}
+
+			// Emit confirmation event
+			Self::deposit_event(Event::TransactionConfirmed {
+				multisig: multisig.clone(),
+				transaction_id,
+				signer: who.clone(),
+			});
 
 			Ok(())
 		}
@@ -440,7 +478,7 @@ pub mod pallet {
 			<Confirmations<T>>::remove(&multisig, (transaction_id, who.clone()));
 
 			// Emit revocation event
-			Self::deposit_event(Event::ConfirmationRevoked {
+			Self::deposit_event(Event::TransactionUnsigned {
 				multisig,
 				transaction_id,
 				signer: who,
