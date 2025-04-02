@@ -1,5 +1,5 @@
 # format, test, build
 cargo +nightly fmt
-cargo t -p pallet-multisig
+RUST_BACKTRACE=1 cargo t -p pallet-multisig
 cargo build
 # cargo build --release

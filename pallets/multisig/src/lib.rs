@@ -173,6 +173,11 @@ pub mod pallet {
 			transaction_id: u32,
 			signer: T::AccountId,
 		},
+		TransactionExecuted {
+			multisig: T::AccountId,
+			transaction_id: u32,
+			result: DispatchResult,
+		},
 	}
 
 	/// Errors inform users that something went wrong.
@@ -195,6 +200,12 @@ pub mod pallet {
 		MultisigNotFound,
 		/// Not an owner of the multisig
 		NotOwner,
+		/// Transaction already executed
+		AlreadyExecuted,
+		/// Transaction not found
+		TransactionNotFound,
+		/// Transaction already confirmed
+		AlreadyConfirmed,
 	}
 
 	/// Dispatchable functions allows users to interact with the pallet and invoke state changes.
@@ -360,6 +371,52 @@ pub mod pallet {
 
 			Ok(())
 		}
+
+		/// Confirm a multisig transaction
+		pub fn confirm_transaction(
+			origin: OriginFor<T>,
+			multisig: T::AccountId,
+			transaction_id: u32,
+		) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+
+			// Ensure the multisig exists
+			let multisig_data =
+				<Multisigs<T>>::get(&multisig).ok_or(Error::<T>::MultisigNotFound)?;
+
+			// Ensure the sender is an owner
+			ensure!(<MultisigOwners<T>>::contains_key(&multisig, &who), Error::<T>::NotOwner);
+
+			// Ensure the transaction exists and is not executed
+			let transaction = <Transactions<T>>::get(&multisig, transaction_id)
+				.ok_or(Error::<T>::TransactionNotFound)?;
+			ensure!(!transaction.executed, Error::<T>::AlreadyExecuted);
+
+			// Ensure the signer has not confirmed yet
+			ensure!(
+				!<Confirmations<T>>::contains_key(&multisig, (transaction_id, who.clone())),
+				Error::<T>::AlreadyConfirmed
+			);
+
+			// Store confirmation
+			<Confirmations<T>>::insert(&multisig, (transaction_id, who.clone()), true);
+
+			// Emit confirmation event
+			Self::deposit_event(Event::TransactionConfirmed {
+				multisig: multisig.clone(),
+				transaction_id,
+				signer: who.clone(),
+			});
+
+			// Check if we have enough confirmations to execute
+			let confirmation_count = Self::count_confirmations(&multisig, transaction_id);
+
+			if confirmation_count >= multisig_data.required {
+				Self::do_execute_transaction(&multisig, transaction_id)?;
+			}
+
+			Ok(())
+		}
 	}
 
 	impl<T: Config> Pallet<T> {
@@ -380,6 +437,50 @@ pub mod pallet {
 			let factor_mul =
 				factor.checked_mul(&num_owners.into()).ok_or(Error::<T>::StorageOverflow)?; // TODO: review the error
 			base.checked_add(&factor_mul).ok_or(Error::<T>::StorageOverflow)
+		}
+
+		/// Count confirmations for a transaction
+		pub fn count_confirmations(multisig: &T::AccountId, transaction_id: u32) -> u32 {
+			let mut count = 0;
+
+			if let Some(multisig_data) = <Multisigs<T>>::get(multisig) {
+				for owner in multisig_data.owners.iter() {
+					if <Confirmations<T>>::contains_key(multisig, (transaction_id, owner.clone())) {
+						count += 1;
+					}
+				}
+			}
+
+			count
+		}
+
+		//// Helper to execute a transaction
+		fn do_execute_transaction(multisig: &T::AccountId, transaction_id: u32) -> DispatchResult {
+			// Get the transaction
+			let mut transaction = <Transactions<T>>::get(multisig, transaction_id)
+				.ok_or(Error::<T>::TransactionNotFound)?;
+			ensure!(!transaction.executed, Error::<T>::AlreadyExecuted);
+
+			// Mark as executed before actual execution to avoid reentrancy attacks
+			transaction.executed = true;
+			<Transactions<T>>::insert(multisig, transaction_id, transaction.clone());
+
+			// Execute the call
+			let result = transaction
+				.call
+				.dispatch(frame_system::RawOrigin::Signed(multisig.clone()).into());
+
+			// Emit event with the result
+			let dispatch_result = result.map(|_| ()).map_err(|e| e.error);
+			Self::deposit_event(Event::TransactionExecuted {
+				multisig: multisig.clone(),
+				transaction_id,
+				result: dispatch_result.clone(),
+			});
+
+			// If execution failed, don't propagate the error so that the transaction
+			// remains marked as executed - this matches Gnosis behavior
+			Ok(())
 		}
 	}
 }
