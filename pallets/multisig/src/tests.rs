@@ -177,7 +177,7 @@ fn submit_transaction_works() {
 			Event::TransactionSubmitted { multisig, transaction_id: 0, submitter: 1 }.into(),
 		);
 		System::assert_has_event(
-			Event::TransactionConfirmed { multisig, transaction_id: 0, signer: 1 }.into(),
+			Event::TransactionSigned { multisig, transaction_id: 0, signer: 1 }.into(),
 		);
 	});
 }
@@ -274,7 +274,7 @@ fn confirm_transaction_works() {
 
 		// Verify event
 		System::assert_last_event(
-			Event::TransactionConfirmed { multisig, transaction_id: 0, signer: 2 }.into(),
+			Event::TransactionSigned { multisig, transaction_id: 0, signer: 2 }.into(),
 		);
 	});
 }

@@ -174,8 +174,6 @@ pub mod pallet {
 			transaction_id: u32,
 			submitter: T::AccountId,
 		},
-		/// A transaction was confirmed by an owner
-		TransactionConfirmed { multisig: T::AccountId, transaction_id: u32, signer: T::AccountId },
 		/// A transaction was executed
 		TransactionExecuted { multisig: T::AccountId, transaction_id: u32, result: DispatchResult },
 		/// A transaction was signed by an owner
@@ -385,12 +383,6 @@ pub mod pallet {
 				Self::do_execute_transaction(&multisig, transaction_id)?;
 			}
 
-			// Emit confirmation event
-			Self::deposit_event(Event::TransactionConfirmed {
-				multisig: multisig.clone(),
-				transaction_id,
-				signer: who.clone(),
-			});
 
 			Ok(())
 		}
@@ -437,13 +429,6 @@ pub mod pallet {
 			if confirmation_count >= multisig_data.required {
 				Self::do_execute_transaction(&multisig, transaction_id)?;
 			}
-
-			// Emit confirmation event
-			Self::deposit_event(Event::TransactionConfirmed {
-				multisig: multisig.clone(),
-				transaction_id,
-				signer: who.clone(),
-			});
 
 			Ok(())
 		}
