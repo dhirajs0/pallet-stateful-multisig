@@ -1371,3 +1371,247 @@ fn replace_owner_maintains_threshold() {
 		System::assert_last_event(Event::OwnerAdded { multisig, new_owner }.into());
 	});
 }
+
+#[test]
+fn change_requirement_works() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let owners = vec![1, 2, 3];
+		let threshold = 2;
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+
+		// Create multisig
+		assert_ok!(pallet_multisig::Pallet::<Test>::create_multisig(
+			RuntimeOrigin::signed(1),
+			owners.clone(),
+			threshold
+		));
+
+		// Change threshold to a new value
+		let new_threshold = 3;
+		assert_ok!(pallet_multisig::Pallet::<Test>::change_requirement(
+			RuntimeOrigin::signed(multisig),
+			multisig,
+			new_threshold
+		));
+
+		// Verify the threshold is updated in storage
+		let multisig_data = pallet_multisig::Multisigs::<Test>::get(&multisig).unwrap();
+		assert_eq!(multisig_data.required, new_threshold);
+
+		// Verify event is emitted with correct parameters
+		System::assert_last_event(Event::RequirementChanged { multisig, new_threshold }.into());
+	});
+}
+
+#[test]
+fn change_requirement_to_minimum_works() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let owners = vec![1, 2, 3];
+		let threshold = 2;
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+
+		// Create multisig
+		assert_ok!(pallet_multisig::Pallet::<Test>::create_multisig(
+			RuntimeOrigin::signed(1),
+			owners.clone(),
+			threshold
+		));
+
+		// Change threshold to minimum (1)
+		let new_threshold = 1;
+		assert_ok!(pallet_multisig::Pallet::<Test>::change_requirement(
+			RuntimeOrigin::signed(multisig),
+			multisig,
+			new_threshold
+		));
+
+		// Verify the threshold is updated in storage
+		let multisig_data = pallet_multisig::Multisigs::<Test>::get(&multisig).unwrap();
+		assert_eq!(multisig_data.required, new_threshold);
+
+		// Verify event is emitted with correct parameters
+		System::assert_last_event(Event::RequirementChanged { multisig, new_threshold }.into());
+	});
+}
+
+#[test]
+fn change_requirement_to_maximum_works() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let owners = vec![1, 2, 3];
+		let threshold = 2;
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+
+		// Create multisig
+		assert_ok!(pallet_multisig::Pallet::<Test>::create_multisig(
+			RuntimeOrigin::signed(1),
+			owners.clone(),
+			threshold
+		));
+
+		// Change threshold to maximum (owner count)
+		let new_threshold = owners.len() as u32;
+		assert_ok!(pallet_multisig::Pallet::<Test>::change_requirement(
+			RuntimeOrigin::signed(multisig),
+			multisig,
+			new_threshold
+		));
+
+		// Verify the threshold is updated in storage
+		let multisig_data = pallet_multisig::Multisigs::<Test>::get(&multisig).unwrap();
+		assert_eq!(multisig_data.required, new_threshold);
+
+		// Verify event is emitted with correct parameters
+		System::assert_last_event(Event::RequirementChanged { multisig, new_threshold }.into());
+	});
+}
+
+#[test]
+fn change_requirement_fails_when_called_by_non_multisig() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let owners = vec![1, 2, 3];
+		let threshold = 2;
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+
+		// Create multisig
+		assert_ok!(pallet_multisig::Pallet::<Test>::create_multisig(
+			RuntimeOrigin::signed(1),
+			owners.clone(),
+			threshold
+		));
+
+		// Try to change threshold from a non-multisig account
+		let new_threshold = 3;
+		assert_noop!(
+			pallet_multisig::Pallet::<Test>::change_requirement(
+				RuntimeOrigin::signed(1),
+				multisig,
+				new_threshold
+			),
+			Error::<Test>::NotOwner
+		);
+	});
+}
+
+#[test]
+fn change_requirement_fails_for_nonexistent_multisig() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+		let new_threshold = 3;
+
+		// Try to change threshold for a non-existent multisig
+		assert_noop!(
+			pallet_multisig::Pallet::<Test>::change_requirement(
+				RuntimeOrigin::signed(multisig),
+				multisig,
+				new_threshold
+			),
+			Error::<Test>::MultisigNotFound
+		);
+	});
+}
+
+#[test]
+fn change_requirement_fails_with_zero_threshold() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let owners = vec![1, 2, 3];
+		let threshold = 2;
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+
+		// Create multisig
+		assert_ok!(pallet_multisig::Pallet::<Test>::create_multisig(
+			RuntimeOrigin::signed(1),
+			owners.clone(),
+			threshold
+		));
+
+		// Try to set threshold to 0
+		let new_threshold = 0;
+		assert_noop!(
+			pallet_multisig::Pallet::<Test>::change_requirement(
+				RuntimeOrigin::signed(multisig),
+				multisig,
+				new_threshold
+			),
+			Error::<Test>::InvalidThreshold
+		);
+	});
+}
+
+#[test]
+fn change_requirement_fails_with_threshold_greater_than_owners() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let owners = vec![1, 2, 3];
+		let threshold = 2;
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+
+		// Create multisig
+		assert_ok!(pallet_multisig::Pallet::<Test>::create_multisig(
+			RuntimeOrigin::signed(1),
+			owners.clone(),
+			threshold
+		));
+
+		// Try to set threshold greater than owner count
+		let new_threshold = owners.len() as u32 + 1;
+		assert_noop!(
+			pallet_multisig::Pallet::<Test>::change_requirement(
+				RuntimeOrigin::signed(multisig),
+				multisig,
+				new_threshold
+			),
+			Error::<Test>::InvalidThreshold
+		);
+	});
+}
+
+#[test]
+fn change_requirement_through_multisig_transaction() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let owners = vec![1, 2, 3];
+		let threshold = 2;
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+
+		// Create multisig
+		assert_ok!(pallet_multisig::Pallet::<Test>::create_multisig(
+			RuntimeOrigin::signed(1),
+			owners.clone(),
+			threshold
+		));
+
+		// Submit a transaction to change the threshold
+		let new_threshold = 3;
+		let call = Box::new(RuntimeCall::Multisig(pallet_multisig::Call::change_requirement {
+			multisig,
+			new_threshold,
+		}));
+
+		// Submit the transaction
+		assert_ok!(pallet_multisig::Pallet::<Test>::submit_transaction(
+			RuntimeOrigin::signed(1),
+			multisig,
+			call
+		));
+
+		// First confirmation (already done by submitter)
+		assert_eq!(pallet_multisig::Pallet::<Test>::count_confirmations(&multisig, 0), 1);
+
+		// Second confirmation (should trigger execution)
+		assert_ok!(pallet_multisig::Pallet::<Test>::confirm_transaction(
+			RuntimeOrigin::signed(2),
+			multisig,
+			0
+		));
+
+		// Verify the threshold is updated in storage
+		let multisig_data = pallet_multisig::Multisigs::<Test>::get(&multisig).unwrap();
+		assert_eq!(multisig_data.required, new_threshold);
+	});
+}

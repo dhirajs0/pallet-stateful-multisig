@@ -604,6 +604,35 @@ pub mod pallet {
 
 			Ok(())
 		}
+
+		/// Change the required confirmations threshold
+		pub fn change_requirement(
+			origin: OriginFor<T>,
+			multisig: T::AccountId,
+			new_threshold: u32,
+		) -> DispatchResult {
+			// Only allow calls from the multisig itself
+			Self::ensure_multisig(&multisig, origin)?;
+
+			// Ensure the multisig exists
+			let mut multisig_data =
+				<Multisigs<T>>::get(&multisig).ok_or(Error::<T>::MultisigNotFound)?;
+
+			// Validate the new threshold
+			ensure!(
+				new_threshold > 0 && new_threshold <= multisig_data.owners.len() as u32,
+				Error::<T>::InvalidThreshold
+			);
+
+			// Update the threshold
+			multisig_data.required = new_threshold;
+			<Multisigs<T>>::insert(&multisig, multisig_data);
+
+			// Emit event
+			Self::deposit_event(Event::RequirementChanged { multisig, new_threshold });
+
+			Ok(())
+		}
 	}
 
 	impl<T: Config> Pallet<T> {
