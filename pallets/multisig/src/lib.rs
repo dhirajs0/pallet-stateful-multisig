@@ -118,15 +118,52 @@ pub mod pallet {
 		bool,
 	>;
 
+	#[pallet::storage]
+	pub type Transactions<T: Config> = StorageDoubleMap<
+		_,
+		Twox64Concat,
+		T::AccountId, // Multisig account ID
+		Twox64Concat,
+		u32, // Transaction ID
+		Transaction<T>,
+	>;
+
+	#[pallet::storage]
+	pub type Confirmations<T: Config> = StorageDoubleMap<
+		_,
+		Twox64Concat,
+		T::AccountId, // Multisig account ID
+		Twox64Concat,
+		(u32, T::AccountId), // (Transaction ID, Owner)
+		bool,
+	>;
+
 	/// Pallets use events to inform users when important changes are made.
 	/// https://paritytech.github.io/polkadot-sdk/master/polkadot_sdk_docs/guides/your_first_pallet/index.html#event-and-error
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// We usually use passive tense for events.
-		SomethingStored { something: u32, who: T::AccountId },
+		SomethingStored {
+			something: u32,
+			who: T::AccountId,
+		},
 		/// A new multisig was created
-		MultisigCreated { multisig: T::AccountId, creator: T::AccountId, threshold: u32 },
+		MultisigCreated {
+			multisig: T::AccountId,
+			creator: T::AccountId,
+			threshold: u32,
+		},
+		TransactionSubmitted {
+			multisig: T::AccountId,
+			transaction_id: u32,
+			submitter: T::AccountId,
+		},
+		TransactionConfirmed {
+			multisig: T::AccountId,
+			transaction_id: u32,
+			signer: T::AccountId,
+		},
 	}
 
 	/// Errors inform users that something went wrong.
@@ -145,6 +182,10 @@ pub mod pallet {
 		AlreadyOwner,
 		/// Failed to reserve deposit
 		FailedToReserveDeposit,
+		/// Multisig not found
+		MultisigNotFound,
+		/// Not an owner of the multisig
+		NotOwner,
 	}
 
 	/// Dispatchable functions allows users to interact with the pallet and invoke state changes.
@@ -187,7 +228,7 @@ pub mod pallet {
 				},
 			}
 		}
-
+		// TODO: review and use it in submit_transaction
 		/// An example of re-dispatching a call
 		pub fn redispatch(
 			origin: OriginFor<T>,
@@ -214,6 +255,7 @@ pub mod pallet {
 			// Ensure valid parameters
 			ensure!(!owners.is_empty(), Error::<T>::InvalidThreshold);
 			ensure!(owners.len() <= T::MaxOwners::get() as usize, Error::<T>::TooManyOwners);
+			ensure!(owners.len() <= T::MaxOwners::get() as usize, Error::<T>::TooManyOwners);
 			ensure!(
 				threshold > 0 && threshold <= owners.len() as u32,
 				Error::<T>::InvalidThreshold
@@ -232,7 +274,7 @@ pub mod pallet {
 
 			// Calculate and reserve the deposit
 			let deposit = Self::calculate_deposit(owners.len() as u32)?;
-			T::Currency::reserve(&creator, deposit)
+			T::Currency::reserve(&creator, deposit) // TODO: migrate to hold instead of reserve
 				.map_err(|_| Error::<T>::FailedToReserveDeposit)?;
 
 			// Create the multisig
@@ -263,6 +305,52 @@ pub mod pallet {
 
 			Ok(())
 		}
+
+		/// Submit a transaction to a multisig
+		pub fn submit_transaction(
+			origin: OriginFor<T>,
+			multisig: T::AccountId,
+			call: Box<<T as Config>::RuntimeCall>,
+		) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+
+			// Ensure the multisig exists
+			let mut multisig_data =
+				<Multisigs<T>>::get(&multisig).ok_or(Error::<T>::MultisigNotFound)?;
+
+			// Ensure the sender is an owner
+			ensure!(<MultisigOwners<T>>::contains_key(&multisig, &who), Error::<T>::NotOwner);
+
+			// Create transaction ID and store transaction
+			let transaction_id = multisig_data.transaction_count;
+			multisig_data.transaction_count = multisig_data
+				.transaction_count
+				.checked_add(1)
+				.ok_or("Transaction count overflow")?;
+
+			let transaction = Transaction { call: *call, executed: false };
+
+			<Transactions<T>>::insert(&multisig, transaction_id, transaction);
+			<Multisigs<T>>::insert(&multisig, multisig_data);
+
+			// Automatically confirm the transaction for the submitter
+			<Confirmations<T>>::insert(&multisig, (transaction_id, who.clone()), true);
+
+			// Emit events
+			Self::deposit_event(Event::TransactionSubmitted {
+				multisig: multisig.clone(),
+				transaction_id,
+				submitter: who.clone(),
+			});
+
+			Self::deposit_event(Event::TransactionConfirmed {
+				multisig,
+				transaction_id,
+				signer: who,
+			});
+
+			Ok(())
+		}
 	}
 
 	impl<T: Config> Pallet<T> {
@@ -277,6 +365,9 @@ pub mod pallet {
 		fn calculate_deposit(num_owners: u32) -> Result<BalanceOf<T>, Error<T>> {
 			let base = T::MultisigDepositBase::get();
 			let factor = T::MultisigDepositFactor::get();
+			let factor_mul =
+				factor.checked_mul(&num_owners.into()).ok_or(Error::<T>::StorageOverflow)?; // TODO: review the error
+			base.checked_add(&factor_mul).ok_or(Error::<T>::StorageOverflow)?;
 			let factor_mul =
 				factor.checked_mul(&num_owners.into()).ok_or(Error::<T>::StorageOverflow)?; // TODO: review the error
 			base.checked_add(&factor_mul).ok_or(Error::<T>::StorageOverflow)
