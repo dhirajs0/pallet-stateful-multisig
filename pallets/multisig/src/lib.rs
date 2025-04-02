@@ -182,6 +182,10 @@ pub mod pallet {
 		TransactionUnsigned { multisig: T::AccountId, transaction_id: u32, signer: T::AccountId },
 		/// A new owner was added to a multisig
 		OwnerAdded { multisig: T::AccountId, new_owner: T::AccountId },
+		/// Requirement of a multisig was changed
+		RequirementChanged { multisig: T::AccountId, new_threshold: u32 },
+		/// An owner was removed from a multisig
+		OwnerRemoved { multisig: T::AccountId, old_owner: T::AccountId },
 	}
 
 	/// Errors inform users that something went wrong.
@@ -212,6 +216,8 @@ pub mod pallet {
 		AlreadyConfirmed,
 		/// Transaction not confirmed
 		NotConfirmed,
+		/// Owner not found
+		OwnerNotFound,
 	}
 
 	/// Dispatchable functions allows users to interact with the pallet and invoke state changes.
@@ -510,6 +516,47 @@ pub mod pallet {
 
 			// Emit event
 			Self::deposit_event(Event::OwnerAdded { multisig, new_owner });
+
+			Ok(())
+		}
+
+		/// Remove an owner from the multisig
+		pub fn remove_owner(
+			origin: OriginFor<T>,
+			multisig: T::AccountId,
+			old_owner: T::AccountId,
+		) -> DispatchResult {
+			// Only allow calls from the multisig itself
+			Self::ensure_multisig(&multisig, origin)?;
+
+			// Ensure the multisig exists
+			let mut multisig_data =
+				<Multisigs<T>>::get(&multisig).ok_or(Error::<T>::MultisigNotFound)?;
+
+			// Ensure the old owner is actually an owner
+			ensure!(
+				<MultisigOwners<T>>::contains_key(&multisig, &old_owner),
+				Error::<T>::OwnerNotFound
+			);
+
+			// Remove the owner
+			multisig_data.owners.retain(|o| o != &old_owner);
+
+			// Adjust required confirmations if needed
+			if multisig_data.required > multisig_data.owners.len() as u32 {
+				multisig_data.required = multisig_data.owners.len() as u32;
+				Self::deposit_event(Event::RequirementChanged {
+					multisig: multisig.clone(),
+					new_threshold: multisig_data.required,
+				});
+			}
+
+			// Update storage
+			<Multisigs<T>>::insert(&multisig, multisig_data);
+			<MultisigOwners<T>>::remove(&multisig, &old_owner);
+
+			// Emit event
+			Self::deposit_event(Event::OwnerRemoved { multisig, old_owner });
 
 			Ok(())
 		}
