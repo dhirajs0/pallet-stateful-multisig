@@ -153,31 +153,21 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// We usually use passive tense for events.
-		SomethingStored {
-			something: u32,
-			who: T::AccountId,
-		},
+		SomethingStored { something: u32, who: T::AccountId },
 		/// A new multisig was created
-		MultisigCreated {
-			multisig: T::AccountId,
-			creator: T::AccountId,
-			threshold: u32,
-		},
+		MultisigCreated { multisig: T::AccountId, creator: T::AccountId, threshold: u32 },
+		/// A transaction was submitted to a multisig
 		TransactionSubmitted {
 			multisig: T::AccountId,
 			transaction_id: u32,
 			submitter: T::AccountId,
 		},
-		TransactionConfirmed {
-			multisig: T::AccountId,
-			transaction_id: u32,
-			signer: T::AccountId,
-		},
-		TransactionExecuted {
-			multisig: T::AccountId,
-			transaction_id: u32,
-			result: DispatchResult,
-		},
+		/// A transaction was confirmed by an owner
+		TransactionConfirmed { multisig: T::AccountId, transaction_id: u32, signer: T::AccountId },
+		/// A transaction was executed
+		TransactionExecuted { multisig: T::AccountId, transaction_id: u32, result: DispatchResult },
+		/// A confirmation was revoked by an owner
+		ConfirmationRevoked { multisig: T::AccountId, transaction_id: u32, signer: T::AccountId },
 	}
 
 	/// Errors inform users that something went wrong.
@@ -206,6 +196,8 @@ pub mod pallet {
 		TransactionNotFound,
 		/// Transaction already confirmed
 		AlreadyConfirmed,
+		/// Transaction not confirmed
+		NotConfirmed,
 	}
 
 	/// Dispatchable functions allows users to interact with the pallet and invoke state changes.
@@ -414,6 +406,45 @@ pub mod pallet {
 			if confirmation_count >= multisig_data.required {
 				Self::do_execute_transaction(&multisig, transaction_id)?;
 			}
+
+			Ok(())
+		}
+
+		/// Revoke a previous confirmation
+		pub fn revoke_confirmation(
+			origin: OriginFor<T>,
+			multisig: T::AccountId,
+			transaction_id: u32,
+		) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+
+			// Ensure the multisig exists
+			let _multisig_data =
+				<Multisigs<T>>::get(&multisig).ok_or(Error::<T>::MultisigNotFound)?;
+
+			// Ensure the sender is an owner
+			ensure!(<MultisigOwners<T>>::contains_key(&multisig, &who), Error::<T>::NotOwner);
+
+			// Ensure the transaction exists and is not executed
+			let transaction = <Transactions<T>>::get(&multisig, transaction_id)
+				.ok_or(Error::<T>::TransactionNotFound)?;
+			ensure!(!transaction.executed, Error::<T>::AlreadyExecuted);
+
+			// Ensure the signer has confirmed previously
+			ensure!(
+				<Confirmations<T>>::contains_key(&multisig, (transaction_id, who.clone())),
+				Error::<T>::NotConfirmed
+			);
+
+			// Remove confirmation
+			<Confirmations<T>>::remove(&multisig, (transaction_id, who.clone()));
+
+			// Emit revocation event
+			Self::deposit_event(Event::ConfirmationRevoked {
+				multisig,
+				transaction_id,
+				signer: who,
+			});
 
 			Ok(())
 		}
