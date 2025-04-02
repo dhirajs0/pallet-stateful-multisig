@@ -1,6 +1,6 @@
+use crate as pallet_multisig;
 use crate::{mock::*, *};
 use frame_support::{assert_noop, assert_ok};
-use crate as pallet_multisig;
 
 #[test]
 fn it_works_for_default_value() {
@@ -20,7 +20,10 @@ fn it_works_for_default_value() {
 fn correct_error_for_none_value() {
 	new_test_ext().execute_with(|| {
 		// Ensure the expected error is thrown when no value is present.
-		assert_noop!(pallet_multisig::Pallet::<Test>::cause_error(RuntimeOrigin::signed(1)), Error::<Test>::NoneValue);
+		assert_noop!(
+			pallet_multisig::Pallet::<Test>::cause_error(RuntimeOrigin::signed(1)),
+			Error::<Test>::NoneValue
+		);
 	});
 }
 
@@ -38,22 +41,32 @@ fn create_multisig_works() {
 		));
 
 		// Verify multisig was created
-		let multisig = Multisigs::<Test>::get(&pallet_multisig::Pallet::<Test>::multi_account_id(0)).unwrap();
+		let multisig =
+			Multisigs::<Test>::get(&pallet_multisig::Pallet::<Test>::multi_account_id(0)).unwrap();
 		assert_eq!(multisig.owners, owners);
 		assert_eq!(multisig.required, threshold);
 		assert_eq!(multisig.transaction_count, 0);
 
 		// Verify owner mappings
 		for owner in owners.iter() {
-			assert_eq!(MultisigOwners::<Test>::get(&pallet_multisig::Pallet::<Test>::multi_account_id(0), owner), Some(true));
+			assert_eq!(
+				MultisigOwners::<Test>::get(
+					&pallet_multisig::Pallet::<Test>::multi_account_id(0),
+					owner
+				),
+				Some(true)
+			);
 		}
 
 		// Verify event
-		System::assert_last_event(Event::MultisigCreated {
-			multisig: pallet_multisig::Pallet::<Test>::multi_account_id(0),
-			creator: 1,
-			threshold,
-		}.into());
+		System::assert_last_event(
+			Event::MultisigCreated {
+				multisig: pallet_multisig::Pallet::<Test>::multi_account_id(0),
+				creator: 1,
+				threshold,
+			}
+			.into(),
+		);
 	});
 }
 
@@ -65,13 +78,21 @@ fn create_multisig_fails_with_invalid_threshold() {
 
 		// Threshold of 0
 		assert_noop!(
-			pallet_multisig::Pallet::<Test>::create_multisig(RuntimeOrigin::signed(1), owners.clone(), 0),
+			pallet_multisig::Pallet::<Test>::create_multisig(
+				RuntimeOrigin::signed(1),
+				owners.clone(),
+				0
+			),
 			Error::<Test>::InvalidThreshold
 		);
 
 		// Threshold greater than number of owners
 		assert_noop!(
-			pallet_multisig::Pallet::<Test>::create_multisig(RuntimeOrigin::signed(1), owners.clone(), 4),
+			pallet_multisig::Pallet::<Test>::create_multisig(
+				RuntimeOrigin::signed(1),
+				owners.clone(),
+				4
+			),
 			Error::<Test>::InvalidThreshold
 		);
 	});
