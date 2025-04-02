@@ -560,6 +560,50 @@ pub mod pallet {
 
 			Ok(())
 		}
+
+		/// Replace an owner in the multisig
+		pub fn replace_owner(
+			origin: OriginFor<T>,
+			multisig: T::AccountId,
+			old_owner: T::AccountId,
+			new_owner: T::AccountId,
+		) -> DispatchResult {
+			// Only allow calls from the multisig itself
+			Self::ensure_multisig(&multisig, origin)?;
+
+			// Ensure the multisig exists
+			let mut multisig_data =
+				<Multisigs<T>>::get(&multisig).ok_or(Error::<T>::MultisigNotFound)?;
+
+			// Ensure the old owner exists and new owner doesn't exist
+			ensure!(
+				<MultisigOwners<T>>::contains_key(&multisig, &old_owner),
+				Error::<T>::OwnerNotFound
+			);
+			ensure!(
+				!<MultisigOwners<T>>::contains_key(&multisig, &new_owner),
+				Error::<T>::AlreadyOwner
+			);
+
+			// Replace the owner
+			for i in 0..multisig_data.owners.len() {
+				if multisig_data.owners[i] == old_owner {
+					multisig_data.owners[i] = new_owner.clone();
+					break;
+				}
+			}
+
+			// Update storage
+			<Multisigs<T>>::insert(&multisig, multisig_data);
+			<MultisigOwners<T>>::remove(&multisig, &old_owner);
+			<MultisigOwners<T>>::insert(&multisig, &new_owner, true);
+
+			// Emit events
+			Self::deposit_event(Event::OwnerRemoved { multisig: multisig.clone(), old_owner });
+			Self::deposit_event(Event::OwnerAdded { multisig, new_owner });
+
+			Ok(())
+		}
 	}
 
 	impl<T: Config> Pallet<T> {
@@ -608,10 +652,10 @@ pub mod pallet {
 			transaction.executed = true;
 			<Transactions<T>>::insert(multisig, transaction_id, transaction.clone());
 
-			// Execute the call
+			// Execute the call i.e redispatch it
 			let result = transaction
 				.call
-				.dispatch(frame_system::RawOrigin::Signed(multisig.clone()).into());
+				.dispatch(frame_system::RawOrigin::Signed(multisig.clone()).into()); // redispatching the call on behalf of the multisig
 
 			// Emit event with the result
 			let dispatch_result = result.map(|_| ()).map_err(|e| e.error);

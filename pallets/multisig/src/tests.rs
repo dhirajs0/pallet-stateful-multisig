@@ -1133,3 +1133,241 @@ fn remove_owner_maintains_threshold_when_not_needed() {
 		System::assert_last_event(Event::OwnerRemoved { multisig, old_owner }.into());
 	});
 }
+
+#[test]
+fn replace_owner_works() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let owners = vec![1, 2, 3];
+		let threshold = 2;
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+
+		// Create multisig
+		assert_ok!(pallet_multisig::Pallet::<Test>::create_multisig(
+			RuntimeOrigin::signed(1),
+			owners.clone(),
+			threshold
+		));
+
+		// Replace an owner
+		let old_owner = 3;
+		let new_owner = 4;
+		assert_ok!(pallet_multisig::Pallet::<Test>::replace_owner(
+			RuntimeOrigin::signed(multisig),
+			multisig,
+			old_owner,
+			new_owner
+		));
+
+		// Verify the owner is replaced in the owners list
+		let multisig_data = pallet_multisig::Multisigs::<Test>::get(&multisig).unwrap();
+		assert!(!multisig_data.owners.contains(&old_owner));
+		assert!(multisig_data.owners.contains(&new_owner));
+
+		// Verify the MultisigOwners storage is updated correctly
+		assert!(!pallet_multisig::MultisigOwners::<Test>::contains_key(&multisig, &old_owner));
+		assert!(pallet_multisig::MultisigOwners::<Test>::contains_key(&multisig, &new_owner));
+
+		// Verify events are emitted in the correct order
+		System::assert_has_event(Event::OwnerRemoved { multisig, old_owner }.into());
+		System::assert_last_event(Event::OwnerAdded { multisig, new_owner }.into());
+	});
+}
+
+#[test]
+fn replace_owner_fails_when_called_by_non_multisig() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let owners = vec![1, 2, 3];
+		let threshold = 2;
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+
+		// Create multisig
+		assert_ok!(pallet_multisig::Pallet::<Test>::create_multisig(
+			RuntimeOrigin::signed(1),
+			owners.clone(),
+			threshold
+		));
+
+		// Try to replace an owner from a non-multisig account
+		let old_owner = 3;
+		let new_owner = 4;
+		assert_noop!(
+			pallet_multisig::Pallet::<Test>::replace_owner(
+				RuntimeOrigin::signed(1),
+				multisig,
+				old_owner,
+				new_owner
+			),
+			Error::<Test>::NotOwner
+		);
+	});
+}
+
+#[test]
+fn replace_owner_fails_when_old_owner_does_not_exist() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let owners = vec![1, 2, 3];
+		let threshold = 2;
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+
+		// Create multisig
+		assert_ok!(pallet_multisig::Pallet::<Test>::create_multisig(
+			RuntimeOrigin::signed(1),
+			owners.clone(),
+			threshold
+		));
+
+		// Try to replace a non-existent owner
+		let non_existent_owner = 5;
+		let new_owner = 4;
+		assert_noop!(
+			pallet_multisig::Pallet::<Test>::replace_owner(
+				RuntimeOrigin::signed(multisig),
+				multisig,
+				non_existent_owner,
+				new_owner
+			),
+			Error::<Test>::OwnerNotFound
+		);
+	});
+}
+
+#[test]
+fn replace_owner_fails_when_new_owner_already_exists() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let owners = vec![1, 2, 3];
+		let threshold = 2;
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+
+		// Create multisig
+		assert_ok!(pallet_multisig::Pallet::<Test>::create_multisig(
+			RuntimeOrigin::signed(1),
+			owners.clone(),
+			threshold
+		));
+
+		// Try to replace with an existing owner
+		let old_owner = 3;
+		let existing_owner = 1;
+		assert_noop!(
+			pallet_multisig::Pallet::<Test>::replace_owner(
+				RuntimeOrigin::signed(multisig),
+				multisig,
+				old_owner,
+				existing_owner
+			),
+			Error::<Test>::AlreadyOwner
+		);
+	});
+}
+
+#[test]
+fn replace_owner_fails_for_nonexistent_multisig() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+		let old_owner = 3;
+		let new_owner = 4;
+
+		// Try to replace an owner in a non-existent multisig
+		assert_noop!(
+			pallet_multisig::Pallet::<Test>::replace_owner(
+				RuntimeOrigin::signed(multisig),
+				multisig,
+				old_owner,
+				new_owner
+			),
+			Error::<Test>::MultisigNotFound
+		);
+	});
+}
+
+#[test]
+fn replace_owner_through_multisig_transaction() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let owners = vec![1, 2, 3];
+		let threshold = 2;
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+
+		// Create multisig
+		assert_ok!(pallet_multisig::Pallet::<Test>::create_multisig(
+			RuntimeOrigin::signed(1),
+			owners.clone(),
+			threshold
+		));
+
+		// Submit a transaction to replace an owner
+		let old_owner = 3;
+		let new_owner = 4;
+		let call = Box::new(RuntimeCall::Multisig(pallet_multisig::Call::replace_owner {
+			multisig,
+			old_owner,
+			new_owner,
+		}));
+
+		// Submit the transaction
+		assert_ok!(pallet_multisig::Pallet::<Test>::submit_transaction(
+			RuntimeOrigin::signed(1),
+			multisig,
+			call
+		));
+
+		// First confirmation (already done by submitter)
+		assert_eq!(pallet_multisig::Pallet::<Test>::count_confirmations(&multisig, 0), 1);
+
+		// Second confirmation (should trigger execution)
+		assert_ok!(pallet_multisig::Pallet::<Test>::confirm_transaction(
+			RuntimeOrigin::signed(2),
+			multisig,
+			0
+		));
+
+		// Verify the owner is replaced in the owners list
+		let multisig_data = pallet_multisig::Multisigs::<Test>::get(&multisig).unwrap();
+		assert!(!multisig_data.owners.contains(&old_owner));
+		assert!(multisig_data.owners.contains(&new_owner));
+
+		// Verify the MultisigOwners storage is updated correctly
+		assert!(!pallet_multisig::MultisigOwners::<Test>::contains_key(&multisig, &old_owner));
+		assert!(pallet_multisig::MultisigOwners::<Test>::contains_key(&multisig, &new_owner));
+	});
+}
+
+#[test]
+fn replace_owner_maintains_threshold() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let owners = vec![1, 2, 3];
+		let threshold = 2;
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+
+		// Create multisig
+		assert_ok!(pallet_multisig::Pallet::<Test>::create_multisig(
+			RuntimeOrigin::signed(1),
+			owners.clone(),
+			threshold
+		));
+
+		// Replace an owner
+		let old_owner = 3;
+		let new_owner = 4;
+		assert_ok!(pallet_multisig::Pallet::<Test>::replace_owner(
+			RuntimeOrigin::signed(multisig),
+			multisig,
+			old_owner,
+			new_owner
+		));
+
+		// Verify the threshold is maintained
+		let multisig_data = pallet_multisig::Multisigs::<Test>::get(&multisig).unwrap();
+		assert_eq!(multisig_data.required, threshold);
+
+		// Verify no RequirementChanged event is emitted
+		System::assert_has_event(Event::OwnerRemoved { multisig, old_owner }.into());
+		System::assert_last_event(Event::OwnerAdded { multisig, new_owner }.into());
+	});
+}
