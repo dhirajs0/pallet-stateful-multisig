@@ -1,4 +1,5 @@
 use crate as pallet_multisig;
+use crate::HoldReason;
 use frame_support::{
 	derive_impl,
 	traits::{ConstU128, ConstU16, ConstU32, ConstU64},
@@ -63,7 +64,7 @@ impl pallet_balances::Config for Test {
 	type MaxLocks = ConstU32<10>;
 	type MaxReserves = ();
 	type ReserveIdentifier = [u8; 8];
-	type RuntimeHoldReason = ();
+	type RuntimeHoldReason = HoldReason;
 	type FreezeIdentifier = ();
 	type MaxFreezes = ConstU32<10>;
 }
@@ -73,7 +74,6 @@ impl pallet_multisig::Config for Test {
 	type NativeBalance = Balances;
 	type RuntimeCall = RuntimeCall;
 	type MaxOwners = ConstU32<50>; // TODO: review
-	type Currency = Balances;
 	type MultisigDepositBase = ConstU128<100>;
 	type MultisigDepositFactor = ConstU128<50>;
 }

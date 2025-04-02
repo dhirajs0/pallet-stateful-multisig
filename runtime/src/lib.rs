@@ -20,6 +20,7 @@ use frame::{
 	},
 	traits::{FindAuthor, One},
 };
+use pallet_multisig::HoldReason;
 use pallet_transaction_payment::{ConstFeeMultiplier, FeeDetails, Multiplier, RuntimeDispatchInfo};
 
 #[runtime_version]
@@ -119,6 +120,7 @@ impl pallet_balances::Config for Runtime {
 	// set some other types.
 	type Balance = u128;
 	type ExistentialDeposit = ConstU128<10>;
+	type RuntimeHoldReason = HoldReason;
 }
 
 #[derive_impl(pallet_sudo::config_preludes::TestDefaultConfig)]
@@ -180,7 +182,6 @@ impl pallet_multisig::Config for Runtime {
 	type RuntimeCall = RuntimeCall;
 	type MaxOwners = ConstU32<50>; // TODO: review - explore parameter_types!
 
-	type Currency = Balances;
 	type MultisigDepositBase = ConstU128<100>;
 	type MultisigDepositFactor = ConstU128<10>;
 }

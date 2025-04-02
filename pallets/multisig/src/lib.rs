@@ -19,7 +19,7 @@ pub mod pallet {
 	use frame_support::{
 		dispatch::{GetDispatchInfo, RawOrigin},
 		pallet_prelude::*,
-		traits::{fungible, Currency, ReservableCurrency},
+		traits::{fungible, fungible::MutateHold, VariantCount},
 	};
 	use frame_system::pallet_prelude::*;
 	use sp_io::hashing::blake2_256;
@@ -27,8 +27,20 @@ pub mod pallet {
 	use sp_std::{collections::btree_set::BTreeSet, prelude::*};
 	// use sp_arithmetic::traits::{Arithmetic, Saturating};
 
-	pub type BalanceOf<T> =
-		<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance; // TODO: review if its good idea to change from Nativebalance to Currency
+	pub type BalanceOf<T> = <<T as Config>::NativeBalance as fungible::Inspect<
+		<T as frame_system::Config>::AccountId,
+	>>::Balance;
+
+	#[derive(Copy, Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, MaxEncodedLen, TypeInfo)]
+	pub enum HoldReason {
+		Multisig,
+	}
+
+	// Implemented VariantCount manually as the VariantCount macro is in variant_count crate which
+	// is not available
+	impl VariantCount for HoldReason {
+		const VARIANT_COUNT: u32 = 1; // Because we have only one variant (Multisig)
+	}
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -43,13 +55,10 @@ pub mod pallet {
 		/// Type to access the Balances Pallet.
 		type NativeBalance: fungible::Inspect<Self::AccountId>
 			+ fungible::Mutate<Self::AccountId>
-			+ fungible::hold::Inspect<Self::AccountId>
+			+ fungible::hold::Inspect<Self::AccountId, Reason = HoldReason>
 			+ fungible::hold::Mutate<Self::AccountId>
 			+ fungible::freeze::Inspect<Self::AccountId>
 			+ fungible::freeze::Mutate<Self::AccountId>;
-
-		/// The currency mechanism, used for paying for reserves.
-		type Currency: ReservableCurrency<Self::AccountId>;
 
 		/// A type representing all calls available in your runtime.
 		/// https://paritytech.github.io/polkadot-sdk/master/polkadot_sdk_docs/reference_docs/frame_runtime_types/index.html
@@ -274,7 +283,7 @@ pub mod pallet {
 
 			// Calculate and reserve the deposit
 			let deposit = Self::calculate_deposit(owners.len() as u32)?;
-			T::Currency::reserve(&creator, deposit) // TODO: migrate to hold instead of reserve
+			T::NativeBalance::hold(&HoldReason::Multisig, &creator, deposit)
 				.map_err(|_| Error::<T>::FailedToReserveDeposit)?;
 
 			// Create the multisig
