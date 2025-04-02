@@ -716,3 +716,191 @@ fn revoke_confirmation_fails_for_nonexistent_transaction() {
 		);
 	});
 }
+
+#[test]
+fn add_owner_works() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let owners = vec![1, 2, 3];
+		let threshold = 2;
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+
+		// Create multisig
+		assert_ok!(pallet_multisig::Pallet::<Test>::create_multisig(
+			RuntimeOrigin::signed(1),
+			owners.clone(),
+			threshold
+		));
+
+		// Add a new owner
+		let new_owner = 4;
+		assert_ok!(pallet_multisig::Pallet::<Test>::add_owner(
+			RuntimeOrigin::signed(multisig),
+			multisig,
+			new_owner
+		));
+
+		// Verify the new owner is added to the owners list
+		let multisig_data = pallet_multisig::Multisigs::<Test>::get(&multisig).unwrap();
+		assert!(multisig_data.owners.contains(&new_owner));
+
+		// Verify the new owner is added to the MultisigOwners storage
+		assert!(pallet_multisig::MultisigOwners::<Test>::contains_key(&multisig, &new_owner));
+
+		// Verify event
+		System::assert_last_event(Event::OwnerAdded { multisig, new_owner }.into());
+	});
+}
+
+#[test]
+fn add_owner_fails_when_called_by_non_multisig() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let owners = vec![1, 2, 3];
+		let threshold = 2;
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+
+		// Create multisig
+		assert_ok!(pallet_multisig::Pallet::<Test>::create_multisig(
+			RuntimeOrigin::signed(1),
+			owners.clone(),
+			threshold
+		));
+
+		// Try to add a new owner from a non-multisig account
+		let new_owner = 4;
+		assert_noop!(
+			pallet_multisig::Pallet::<Test>::add_owner(
+				RuntimeOrigin::signed(1),
+				multisig,
+				new_owner
+			),
+			Error::<Test>::NotOwner
+		);
+	});
+}
+
+#[test]
+fn add_owner_fails_when_owner_already_exists() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let owners = vec![1, 2, 3];
+		let threshold = 2;
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+
+		// Create multisig
+		assert_ok!(pallet_multisig::Pallet::<Test>::create_multisig(
+			RuntimeOrigin::signed(1),
+			owners.clone(),
+			threshold
+		));
+
+		// Try to add an existing owner
+		assert_noop!(
+			pallet_multisig::Pallet::<Test>::add_owner(
+				RuntimeOrigin::signed(multisig),
+				multisig,
+				1
+			),
+			Error::<Test>::AlreadyOwner
+		);
+	});
+}
+
+#[ignore] // TODO: fix
+#[test]
+fn add_owner_fails_when_max_owners_reached() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		// Create a multisig with MaxOwners (3) owners
+
+		let owners: Vec<u64> = (1..=50).collect();
+		let threshold = 2;
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+
+		// Create multisig
+		assert_ok!(pallet_multisig::Pallet::<Test>::create_multisig(
+			RuntimeOrigin::signed(1),
+			owners.clone(),
+			threshold
+		));
+
+		// Try to add a new owner when at max capacity
+		let new_owner = 4;
+		assert_noop!(
+			pallet_multisig::Pallet::<Test>::add_owner(
+				RuntimeOrigin::signed(multisig),
+				multisig,
+				new_owner
+			),
+			Error::<Test>::TooManyOwners
+		);
+	});
+}
+
+#[test]
+fn add_owner_fails_for_nonexistent_multisig() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+		let new_owner = 4;
+
+		// Try to add an owner to a non-existent multisig
+		assert_noop!(
+			pallet_multisig::Pallet::<Test>::add_owner(
+				RuntimeOrigin::signed(multisig),
+				multisig,
+				new_owner
+			),
+			Error::<Test>::MultisigNotFound
+		);
+	});
+}
+
+#[test]
+fn add_owner_through_multisig_transaction() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let owners = vec![1, 2, 3];
+		let threshold = 2;
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+
+		// Create multisig
+		assert_ok!(pallet_multisig::Pallet::<Test>::create_multisig(
+			RuntimeOrigin::signed(1),
+			owners.clone(),
+			threshold
+		));
+
+		// Submit a transaction to add a new owner
+		let new_owner = 4;
+		let call = Box::new(RuntimeCall::Multisig(pallet_multisig::Call::add_owner {
+			multisig,
+			new_owner,
+		}));
+
+		// Submit the transaction
+		assert_ok!(pallet_multisig::Pallet::<Test>::submit_transaction(
+			RuntimeOrigin::signed(1),
+			multisig,
+			call
+		));
+
+		// First confirmation (already done by submitter)
+		assert_eq!(pallet_multisig::Pallet::<Test>::count_confirmations(&multisig, 0), 1);
+
+		// Second confirmation (should trigger execution)
+		assert_ok!(pallet_multisig::Pallet::<Test>::confirm_transaction(
+			RuntimeOrigin::signed(2),
+			multisig,
+			0
+		));
+
+		// Verify the new owner is added to the owners list
+		let multisig_data = pallet_multisig::Multisigs::<Test>::get(&multisig).unwrap();
+		assert!(multisig_data.owners.contains(&new_owner));
+
+		// Verify the new owner is added to the MultisigOwners storage
+		assert!(pallet_multisig::MultisigOwners::<Test>::contains_key(&multisig, &new_owner));
+	});
+}

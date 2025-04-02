@@ -179,7 +179,9 @@ pub mod pallet {
 		/// A transaction was signed by an owner
 		TransactionSigned { multisig: T::AccountId, transaction_id: u32, signer: T::AccountId },
 		/// A transaction was unsigned by an owner
-		TransactionUnsigned { multisig: T::AccountId, transaction_id: u32, signer: T::AccountId }
+		TransactionUnsigned { multisig: T::AccountId, transaction_id: u32, signer: T::AccountId },
+		/// A new owner was added to a multisig
+		OwnerAdded { multisig: T::AccountId, new_owner: T::AccountId },
 	}
 
 	/// Errors inform users that something went wrong.
@@ -347,7 +349,7 @@ pub mod pallet {
 
 			// Create transaction ID and store transaction
 			let transaction_id = multisig_data.transaction_count; // TODO: change to u128
-			// Increment transaction count
+														 // Increment transaction count
 			multisig_data.transaction_count = multisig_data
 				.transaction_count
 				.checked_add(1)
@@ -369,7 +371,7 @@ pub mod pallet {
 				transaction_id,
 				submitter: who.clone(),
 			});
-			// TransactionSigned event is emitted 
+			// TransactionSigned event is emitted
 			Self::deposit_event(Event::TransactionSigned {
 				multisig: multisig.clone(),
 				transaction_id,
@@ -382,7 +384,6 @@ pub mod pallet {
 			if confirmation_count >= multisig_data.required {
 				Self::do_execute_transaction(&multisig, transaction_id)?;
 			}
-
 
 			Ok(())
 		}
@@ -471,6 +472,47 @@ pub mod pallet {
 
 			Ok(())
 		}
+
+		/// Add a new owner to a multisig
+		pub fn add_owner(
+			origin: OriginFor<T>,
+			multisig: T::AccountId,
+			new_owner: T::AccountId,
+		) -> DispatchResult {
+			// Only allow calls from the multisig itself
+			Self::ensure_multisig(&multisig, origin)?;
+
+			// Ensure the multisig exists
+			let mut multisig_data =
+				<Multisigs<T>>::get(&multisig).ok_or(Error::<T>::MultisigNotFound)?;
+
+			// Ensure the new owner is not already an owner
+			ensure!(
+				!<MultisigOwners<T>>::contains_key(&multisig, &new_owner),
+				Error::<T>::AlreadyOwner
+			);
+
+			// Ensure we don't exceed max owners
+			ensure!(
+				multisig_data.owners.len() < T::MaxOwners::get() as usize,
+				Error::<T>::TooManyOwners
+			);
+
+			// Add the new owner
+			multisig_data
+				.owners
+				.try_push(new_owner.clone())
+				.map_err(|_| Error::<T>::TooManyOwners)?;
+
+			// Update storage
+			<Multisigs<T>>::insert(&multisig, multisig_data);
+			<MultisigOwners<T>>::insert(&multisig, &new_owner, true);
+
+			// Emit event
+			Self::deposit_event(Event::OwnerAdded { multisig, new_owner });
+
+			Ok(())
+		}
 	}
 
 	impl<T: Config> Pallet<T> {
@@ -534,6 +576,16 @@ pub mod pallet {
 
 			// If execution failed, don't propagate the error so that the transaction
 			// remains marked as executed - this matches Gnosis behavior
+			Ok(())
+		}
+
+		/// Check if the origin is a multisig account
+		fn ensure_multisig(
+			multisig: &T::AccountId,
+			origin: OriginFor<T>,
+		) -> Result<(), DispatchError> {
+			let who = ensure_signed(origin)?;
+			ensure!(who == *multisig, Error::<T>::NotOwner);
 			Ok(())
 		}
 	}
