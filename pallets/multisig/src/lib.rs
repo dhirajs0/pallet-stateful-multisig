@@ -23,7 +23,10 @@ pub mod pallet {
 	};
 	use frame_system::pallet_prelude::*;
 	use sp_io::hashing::blake2_256;
-	use sp_runtime::traits::{CheckedAdd, CheckedMul, Dispatchable, TrailingZeroInput};
+	use sp_runtime::{
+		traits::{Dispatchable, TrailingZeroInput},
+		Saturating,
+	};
 	use sp_std::{collections::btree_set::BTreeSet, prelude::*};
 	// use sp_arithmetic::traits::{Arithmetic, Saturating};
 
@@ -80,7 +83,6 @@ pub mod pallet {
 
 		/// Filter for allowed calls in multisig transactions
 		type CallFilter: Contains<<Self as frame_system::Config>::RuntimeCall>;
-
 	}
 
 	/// A multisig wallet and its configuration
@@ -646,15 +648,11 @@ pub mod pallet {
 		}
 
 		/// Calculate the deposit required for a multisig wallet
-		fn calculate_deposit(num_owners: u32) -> Result<BalanceOf<T>, Error<T>> {
+		pub fn calculate_deposit(num_owners: u32) -> Result<BalanceOf<T>, Error<T>> {
 			let base = T::MultisigDepositBase::get();
 			let factor = T::MultisigDepositFactor::get();
-			let factor_mul =
-				factor.checked_mul(&num_owners.into()).ok_or(Error::<T>::StorageOverflow)?; // TODO: review the error
-			base.checked_add(&factor_mul).ok_or(Error::<T>::StorageOverflow)?;
-			let factor_mul =
-				factor.checked_mul(&num_owners.into()).ok_or(Error::<T>::StorageOverflow)?; // TODO: review the error
-			base.checked_add(&factor_mul).ok_or(Error::<T>::StorageOverflow)
+			let factor_mul = factor.saturating_mul(num_owners.into());
+			Ok(base.saturating_add(factor_mul))
 		}
 
 		/// Count confirmations for a transaction
