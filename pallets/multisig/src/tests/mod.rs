@@ -1,3 +1,4 @@
+mod call_filter;
 mod confirm_transaction;
 mod create_multisig;
 mod owner_management;

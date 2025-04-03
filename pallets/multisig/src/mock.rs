@@ -2,7 +2,7 @@ use crate as pallet_multisig;
 use crate::HoldReason;
 use frame_support::{
 	derive_impl, parameter_types,
-	traits::{ConstU128, ConstU16, ConstU32, ConstU64},
+	traits::{ConstU128, ConstU16, ConstU32, ConstU64, Contains},
 };
 use sp_core::H256;
 use sp_runtime::{
@@ -75,6 +75,25 @@ parameter_types! {
 	pub const MaxOwners: u32 = 50;
 }
 
+pub struct MultisigCallFilter;
+impl Contains<RuntimeCall> for MultisigCallFilter {
+	fn contains(c: &RuntimeCall) -> bool {
+		match *c {
+			// Allow balance operations
+			RuntimeCall::Balances(_) => true,
+
+			// Allow system remark (metadata)
+			RuntimeCall::System(frame_system::Call::remark { .. }) => true,
+
+			// Block dangerous system calls and sudo operations
+			RuntimeCall::System(frame_system::Call::set_code { .. }) |
+
+			// Block by default (whitelist approach)
+			_ => false,
+		}
+	}
+}
+
 impl pallet_multisig::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type NativeBalance = Balances;
@@ -82,6 +101,7 @@ impl pallet_multisig::Config for Test {
 	type MaxOwners = MaxOwners;
 	type MultisigDepositBase = MultisigDepositBase;
 	type MultisigDepositFactor = MultisigDepositFactor;
+	type CallFilter = MultisigCallFilter;
 }
 
 pub fn new_test_ext() -> sp_io::TestExternalities {

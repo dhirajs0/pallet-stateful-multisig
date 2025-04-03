@@ -19,7 +19,7 @@ pub mod pallet {
 	use frame_support::{
 		dispatch::{GetDispatchInfo, RawOrigin},
 		pallet_prelude::*,
-		traits::{fungible, fungible::MutateHold, VariantCount},
+		traits::{fungible, fungible::MutateHold, Contains, VariantCount},
 	};
 	use frame_system::pallet_prelude::*;
 	use sp_io::hashing::blake2_256;
@@ -77,6 +77,9 @@ pub mod pallet {
 		/// Deposit factor per owner
 		#[pallet::constant]
 		type MultisigDepositFactor: Get<BalanceOf<Self>>;
+
+		/// Filter for allowed calls in multisig transactions
+		type CallFilter: Contains<<Self as frame_system::Config>::RuntimeCall>;
 	}
 
 	/// A multisig wallet and its configuration
@@ -110,7 +113,7 @@ pub mod pallet {
 	#[scale_info(skip_type_params(T))]
 	pub struct Transaction<T: Config> {
 		/// The encoded call to be dispatched
-		pub call: <T as Config>::RuntimeCall,
+		pub call: <T as frame_system::Config>::RuntimeCall,
 		/// True if the transaction has been executed
 		pub executed: bool,
 	}
@@ -214,6 +217,8 @@ pub mod pallet {
 		OwnerNotFound,
 		/// Not allowed to dissolve
 		NotAllowedToDissolve,
+		/// Call is not allowed by the multisig filter
+		CallNotAllowed,
 	}
 
 	/// Dispatchable functions allows users to interact with the pallet and invoke state changes.
@@ -289,7 +294,7 @@ pub mod pallet {
 		pub fn submit_transaction(
 			origin: OriginFor<T>,
 			multisig: T::AccountId,
-			call: Box<<T as Config>::RuntimeCall>,
+			call: Box<<T as frame_system::Config>::RuntimeCall>,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 
@@ -299,6 +304,9 @@ pub mod pallet {
 
 			// Ensure the sender is an owner
 			ensure!(<MultisigOwners<T>>::contains_key(&multisig, &who), Error::<T>::NotOwner);
+
+			// Check if the call is allowed by the filter
+			ensure!(T::CallFilter::contains(&*call), Error::<T>::CallNotAllowed);
 
 			// Create transaction ID and store transaction
 			let transaction_id = multisig_data.transaction_count; // TODO: change to u128
