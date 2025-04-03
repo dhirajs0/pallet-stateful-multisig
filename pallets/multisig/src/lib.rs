@@ -186,6 +186,8 @@ pub mod pallet {
 		RequirementChanged { multisig: T::AccountId, new_threshold: u32 },
 		/// An owner was removed from a multisig
 		OwnerRemoved { multisig: T::AccountId, old_owner: T::AccountId },
+		/// A multisig was destroyed
+		MultisigDestroyed { multisig: T::AccountId, approving_account: T::AccountId },
 	}
 
 	/// Errors inform users that something went wrong.
@@ -218,6 +220,8 @@ pub mod pallet {
 		NotConfirmed,
 		/// Owner not found
 		OwnerNotFound,
+		/// Not allowed to dissolve
+		NotAllowedToDissolve,
 	}
 
 	/// Dispatchable functions allows users to interact with the pallet and invoke state changes.
@@ -630,6 +634,44 @@ pub mod pallet {
 
 			// Emit event
 			Self::deposit_event(Event::RequirementChanged { multisig, new_threshold });
+
+			Ok(())
+		}
+
+		/// Permanently destroy a multisig wallet
+		pub fn destroy_multisig(origin: OriginFor<T>, multisig: T::AccountId) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+
+			// Ensure the multisig exists
+			let multisig_data =
+				<Multisigs<T>>::get(&multisig).ok_or(Error::<T>::MultisigNotFound)?;
+
+			// Only allow owners to dissolve
+			ensure!(
+				<MultisigOwners<T>>::contains_key(&multisig, &who),
+				Error::<T>::NotAllowedToDissolve
+			);
+
+			// Remove all storage items related to this multisig
+			<Multisigs<T>>::remove(&multisig);
+
+			// Clean up owner mappings
+			for owner in multisig_data.owners.iter() {
+				<MultisigOwners<T>>::remove(&multisig, owner);
+			}
+
+			// Clean up all transactions and confirmations
+			for transaction_id in 0..multisig_data.transaction_count {
+				<Transactions<T>>::remove(&multisig, transaction_id);
+
+				// Clean up confirmations for this transaction
+				for owner in multisig_data.owners.iter() {
+					<Confirmations<T>>::remove(&multisig, (transaction_id, owner.clone()));
+				}
+			}
+
+			// Emit event
+			Self::deposit_event(Event::MultisigDestroyed { multisig, approving_account: who });
 
 			Ok(())
 		}

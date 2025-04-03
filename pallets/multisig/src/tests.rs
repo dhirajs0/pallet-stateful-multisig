@@ -1615,3 +1615,399 @@ fn change_requirement_through_multisig_transaction() {
 		assert_eq!(multisig_data.required, new_threshold);
 	});
 }
+
+#[test]
+fn destroy_multisig_works() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let owners = vec![1, 2, 3];
+		let threshold = 2;
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+
+		// Create multisig first
+		assert_ok!(pallet_multisig::Pallet::<Test>::create_multisig(
+			RuntimeOrigin::signed(1),
+			owners.clone(),
+			threshold
+		));
+
+		// Destroy multisig as owner 1
+		assert_ok!(pallet_multisig::Pallet::<Test>::destroy_multisig(
+			RuntimeOrigin::signed(1),
+			multisig
+		));
+
+		// Verify multisig was removed from storage
+		assert!(Multisigs::<Test>::get(&multisig).is_none());
+
+		// Verify owner mappings were removed
+		for owner in owners.iter() {
+			assert!(MultisigOwners::<Test>::get(&multisig, owner).is_none());
+		}
+
+		// Verify event
+		System::assert_last_event(
+			Event::MultisigDestroyed { multisig, approving_account: 1 }.into(),
+		);
+	});
+}
+
+#[test]
+fn destroy_multisig_works_for_any_owner() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let owners = vec![1, 2, 3];
+		let threshold = 2;
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+
+		// Create multisig first
+		assert_ok!(pallet_multisig::Pallet::<Test>::create_multisig(
+			RuntimeOrigin::signed(1),
+			owners.clone(),
+			threshold
+		));
+
+		// Destroy multisig as owner 2
+		assert_ok!(pallet_multisig::Pallet::<Test>::destroy_multisig(
+			RuntimeOrigin::signed(2),
+			multisig
+		));
+
+		// Verify multisig was removed from storage
+		assert!(Multisigs::<Test>::get(&multisig).is_none());
+
+		// Verify event
+		System::assert_last_event(
+			Event::MultisigDestroyed { multisig, approving_account: 2 }.into(),
+		);
+	});
+}
+
+#[test]
+fn destroy_multisig_fails_for_non_owner() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let owners = vec![1, 2, 3];
+		let threshold = 2;
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+
+		// Create multisig first
+		assert_ok!(pallet_multisig::Pallet::<Test>::create_multisig(
+			RuntimeOrigin::signed(1),
+			owners.clone(),
+			threshold
+		));
+
+		// Try to destroy multisig as non-owner
+		assert_noop!(
+			pallet_multisig::Pallet::<Test>::destroy_multisig(RuntimeOrigin::signed(4), multisig),
+			Error::<Test>::NotAllowedToDissolve
+		);
+	});
+}
+
+#[test]
+fn destroy_multisig_fails_for_nonexistent_multisig() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+
+		// Try to destroy non-existent multisig
+		assert_noop!(
+			pallet_multisig::Pallet::<Test>::destroy_multisig(RuntimeOrigin::signed(1), multisig),
+			Error::<Test>::MultisigNotFound
+		);
+	});
+}
+
+#[test]
+fn destroy_multisig_cleans_up_transactions() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let owners = vec![1, 2, 3];
+		let threshold = 2;
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+
+		// Create multisig first
+		assert_ok!(pallet_multisig::Pallet::<Test>::create_multisig(
+			RuntimeOrigin::signed(1),
+			owners.clone(),
+			threshold
+		));
+
+		// Submit a transaction
+		let call =
+			Box::new(RuntimeCall::System(frame_system::Call::remark { remark: vec![1, 2, 3] }));
+		assert_ok!(pallet_multisig::Pallet::<Test>::submit_transaction(
+			RuntimeOrigin::signed(1),
+			multisig,
+			call
+		));
+
+		// Confirm the transaction
+		assert_ok!(pallet_multisig::Pallet::<Test>::confirm_transaction(
+			RuntimeOrigin::signed(2),
+			multisig,
+			0
+		));
+
+		// Destroy multisig
+		assert_ok!(pallet_multisig::Pallet::<Test>::destroy_multisig(
+			RuntimeOrigin::signed(1),
+			multisig
+		));
+
+		// Verify all storage items were cleaned up
+		assert!(Multisigs::<Test>::get(&multisig).is_none());
+		assert!(Transactions::<Test>::get(&multisig, 0).is_none());
+		assert!(Confirmations::<Test>::get(&multisig, (0, 1)).is_none());
+		assert!(Confirmations::<Test>::get(&multisig, (0, 2)).is_none());
+	});
+}
+
+#[test]
+fn destroyed_multisig_cannot_be_used() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let owners = vec![1, 2, 3];
+		let threshold = 2;
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+
+		// Create multisig first
+		assert_ok!(pallet_multisig::Pallet::<Test>::create_multisig(
+			RuntimeOrigin::signed(1),
+			owners.clone(),
+			threshold
+		));
+
+		// Destroy multisig
+		assert_ok!(pallet_multisig::Pallet::<Test>::destroy_multisig(
+			RuntimeOrigin::signed(1),
+			multisig
+		));
+
+		// Try to submit a transaction to destroyed multisig
+		let call =
+			Box::new(RuntimeCall::System(frame_system::Call::remark { remark: vec![1, 2, 3] }));
+		assert_noop!(
+			pallet_multisig::Pallet::<Test>::submit_transaction(
+				RuntimeOrigin::signed(1),
+				multisig,
+				call
+			),
+			Error::<Test>::MultisigNotFound
+		);
+
+		// Try to confirm a transaction on destroyed multisig
+		assert_noop!(
+			pallet_multisig::Pallet::<Test>::confirm_transaction(
+				RuntimeOrigin::signed(1),
+				multisig,
+				0
+			),
+			Error::<Test>::MultisigNotFound
+		);
+
+		// Try to revoke a confirmation on destroyed multisig
+		assert_noop!(
+			pallet_multisig::Pallet::<Test>::revoke_confirmation(
+				RuntimeOrigin::signed(1),
+				multisig,
+				0
+			),
+			Error::<Test>::MultisigNotFound
+		);
+	});
+}
+
+#[test]
+fn destroy_multisig_with_pending_transactions() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let owners = vec![1, 2, 3];
+		let threshold = 2;
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+
+		// Create multisig first
+		assert_ok!(pallet_multisig::Pallet::<Test>::create_multisig(
+			RuntimeOrigin::signed(1),
+			owners.clone(),
+			threshold
+		));
+
+		// Submit multiple transactions
+		for i in 0..3 {
+			let call =
+				Box::new(RuntimeCall::System(frame_system::Call::remark { remark: vec![i as u8] }));
+			assert_ok!(pallet_multisig::Pallet::<Test>::submit_transaction(
+				RuntimeOrigin::signed(1),
+				multisig,
+				call
+			));
+		}
+
+		// Confirm some transactions
+		assert_ok!(pallet_multisig::Pallet::<Test>::confirm_transaction(
+			RuntimeOrigin::signed(2),
+			multisig,
+			0
+		));
+
+		// Destroy the multisig
+		assert_ok!(pallet_multisig::Pallet::<Test>::destroy_multisig(
+			RuntimeOrigin::signed(1),
+			multisig
+		));
+
+		// Verify all storage is cleaned up
+		assert!(Multisigs::<Test>::get(&multisig).is_none());
+		assert!(MultisigOwners::<Test>::iter_prefix(&multisig).next().is_none());
+		assert!(Transactions::<Test>::iter_prefix(&multisig).next().is_none());
+		assert!(Confirmations::<Test>::iter_prefix(&multisig).next().is_none());
+	});
+}
+
+#[test]
+fn destroy_multisig_verifies_storage_cleanup() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let owners = vec![1, 2, 3];
+		let threshold = 2;
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+
+		// Create multisig first
+		assert_ok!(pallet_multisig::Pallet::<Test>::create_multisig(
+			RuntimeOrigin::signed(1),
+			owners.clone(),
+			threshold
+		));
+
+		// Submit and confirm transactions
+		for i in 0..3 {
+			let call =
+				Box::new(RuntimeCall::System(frame_system::Call::remark { remark: vec![i as u8] }));
+			assert_ok!(pallet_multisig::Pallet::<Test>::submit_transaction(
+				RuntimeOrigin::signed(1),
+				multisig,
+				call
+			));
+			assert_ok!(pallet_multisig::Pallet::<Test>::confirm_transaction(
+				RuntimeOrigin::signed(2),
+				multisig,
+				i
+			));
+		}
+
+		// Verify storage exists before destruction
+		assert!(Multisigs::<Test>::get(&multisig).is_some());
+		assert_eq!(MultisigOwners::<Test>::iter_prefix(&multisig).count(), 3);
+		assert_eq!(Transactions::<Test>::iter_prefix(&multisig).count(), 3);
+		assert_eq!(Confirmations::<Test>::iter_prefix(&multisig).count(), 6); // 3 transactions * 2 confirmations each
+
+		// Destroy the multisig
+		assert_ok!(pallet_multisig::Pallet::<Test>::destroy_multisig(
+			RuntimeOrigin::signed(1),
+			multisig
+		));
+
+		// Verify all storage is cleaned up
+		assert!(Multisigs::<Test>::get(&multisig).is_none());
+		assert!(MultisigOwners::<Test>::iter_prefix(&multisig).next().is_none());
+		assert!(Transactions::<Test>::iter_prefix(&multisig).next().is_none());
+		assert!(Confirmations::<Test>::iter_prefix(&multisig).next().is_none());
+	});
+}
+
+#[test]
+fn destroyed_multisig_usage_fails() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let owners = vec![1, 2, 3];
+		let threshold = 2;
+		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+
+		// Create and destroy multisig
+		assert_ok!(pallet_multisig::Pallet::<Test>::create_multisig(
+			RuntimeOrigin::signed(1),
+			owners.clone(),
+			threshold
+		));
+		assert_ok!(pallet_multisig::Pallet::<Test>::destroy_multisig(
+			RuntimeOrigin::signed(1),
+			multisig
+		));
+
+		// Try to submit transaction
+		let call =
+			Box::new(RuntimeCall::System(frame_system::Call::remark { remark: vec![1, 2, 3] }));
+		assert_noop!(
+			pallet_multisig::Pallet::<Test>::submit_transaction(
+				RuntimeOrigin::signed(1),
+				multisig,
+				call
+			),
+			Error::<Test>::MultisigNotFound
+		);
+
+		// Try to confirm transaction
+		assert_noop!(
+			pallet_multisig::Pallet::<Test>::confirm_transaction(
+				RuntimeOrigin::signed(1),
+				multisig,
+				0
+			),
+			Error::<Test>::MultisigNotFound
+		);
+
+		// Try to revoke confirmation
+		assert_noop!(
+			pallet_multisig::Pallet::<Test>::revoke_confirmation(
+				RuntimeOrigin::signed(1),
+				multisig,
+				0
+			),
+			Error::<Test>::MultisigNotFound
+		);
+
+		// Try to add owner
+		assert_noop!(
+			pallet_multisig::Pallet::<Test>::add_owner(
+				RuntimeOrigin::signed(multisig),
+				multisig,
+				4
+			),
+			Error::<Test>::MultisigNotFound
+		);
+
+		// Try to remove owner
+		assert_noop!(
+			pallet_multisig::Pallet::<Test>::remove_owner(
+				RuntimeOrigin::signed(multisig),
+				multisig,
+				1
+			),
+			Error::<Test>::MultisigNotFound
+		);
+
+		// Try to replace owner
+		assert_noop!(
+			pallet_multisig::Pallet::<Test>::replace_owner(
+				RuntimeOrigin::signed(multisig),
+				multisig,
+				1,
+				4
+			),
+			Error::<Test>::MultisigNotFound
+		);
+
+		// Try to change requirement
+		assert_noop!(
+			pallet_multisig::Pallet::<Test>::change_requirement(
+				RuntimeOrigin::signed(multisig),
+				multisig,
+				1
+			),
+			Error::<Test>::MultisigNotFound
+		);
+	});
+}
