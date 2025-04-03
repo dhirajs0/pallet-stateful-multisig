@@ -2,5 +2,7 @@ target/
 .vscode
 chain_spec.json
 .DS_Store
-notes.txt
+notes.md
 .config/
+./Test_dir/
+./.maintain/frame-weight-template.hbs
