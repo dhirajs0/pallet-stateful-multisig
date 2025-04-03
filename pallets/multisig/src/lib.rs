@@ -674,7 +674,7 @@ pub mod pallet {
 			Self::deposit_event(Event::TransactionExecuted {
 				multisig: multisig.clone(),
 				transaction_id,
-				result: dispatch_result.clone(),
+				result: dispatch_result,
 			});
 
 			// If execution failed, don't propagate the error so that the transaction

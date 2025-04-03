@@ -87,7 +87,7 @@ pub mod pallet {
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		/// An example dispatchable that charges no fee if successful.
-		pub fn free_tx(origin: OriginFor<T>, success: bool) -> DispatchResultWithPostInfo {
+		pub fn free_tx(origin: OriginFor<T>, success: bool) -> DispatchResult {
 			// Check that the extrinsic was signed and get the signer.
 			// This function will return an error if the extrinsic is not signed.
 			// https://paritytech.github.io/polkadot-sdk/master/polkadot_sdk_docs/reference_docs/frame_origin/index.html
@@ -100,7 +100,7 @@ pub mod pallet {
 			Self::deposit_event(Event::<T>::TxSuccess);
 
 			// This line tells the runtime to refund any fee taken, making the tx free.
-			Ok(Pays::No.into())
+			Ok(())
 		}
 
 		/// An example of re-dispatching a call

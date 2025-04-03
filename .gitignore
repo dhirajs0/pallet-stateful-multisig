@@ -3,3 +3,4 @@ target/
 chain_spec.json
 .DS_Store
 notes.txt
+.config/
