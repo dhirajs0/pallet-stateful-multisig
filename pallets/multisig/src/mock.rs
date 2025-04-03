@@ -1,7 +1,7 @@
 use crate as pallet_multisig;
 use crate::HoldReason;
 use frame_support::{
-	derive_impl,
+	derive_impl, parameter_types,
 	traits::{ConstU128, ConstU16, ConstU32, ConstU64},
 };
 use sp_core::H256;
@@ -69,13 +69,19 @@ impl pallet_balances::Config for Test {
 	type MaxFreezes = ConstU32<10>;
 }
 
+parameter_types! {
+	pub const MultisigDepositBase: Balance = 100;
+	pub const MultisigDepositFactor: Balance = 50;
+	pub const MaxOwners: u32 = 50;
+}
+
 impl pallet_multisig::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type NativeBalance = Balances;
 	type RuntimeCall = RuntimeCall;
-	type MaxOwners = ConstU32<50>; // TODO: review
-	type MultisigDepositBase = ConstU128<100>;
-	type MultisigDepositFactor = ConstU128<50>;
+	type MaxOwners = MaxOwners;
+	type MultisigDepositBase = MultisigDepositBase;
+	type MultisigDepositFactor = MultisigDepositFactor;
 }
 
 pub fn new_test_ext() -> sp_io::TestExternalities {
