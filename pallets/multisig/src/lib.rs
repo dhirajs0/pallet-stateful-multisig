@@ -118,10 +118,6 @@ pub mod pallet {
 	/// The pallet's storage items.
 	/// https://paritytech.github.io/polkadot-sdk/master/polkadot_sdk_docs/guides/your_first_pallet/index.html#storage
 	/// https://paritytech.github.io/polkadot-sdk/master/frame_support/pallet_macros/attr.storage.html
-	#[pallet::storage]
-	pub type Something<T> = StorageValue<Value = u32>;
-	#[pallet::storage]
-	pub type SomethingMap<T: Config> = StorageMap<Key = T::AccountId, Value = BlockNumberFor<T>>;
 
 	#[pallet::storage]
 	pub type Multisigs<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, Multisig<T>>;
@@ -164,8 +160,6 @@ pub mod pallet {
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// We usually use passive tense for events.
-		SomethingStored { something: u32, who: T::AccountId },
 		/// A new multisig was created
 		MultisigCreated { multisig: T::AccountId, creator: T::AccountId, threshold: u32 },
 		/// A transaction was submitted to a multisig
@@ -179,7 +173,7 @@ pub mod pallet {
 		/// A transaction was signed by an owner
 		TransactionSigned { multisig: T::AccountId, transaction_id: u32, signer: T::AccountId },
 		/// A transaction was unsigned by an owner
-		TransactionUnsigned { multisig: T::AccountId, transaction_id: u32, signer: T::AccountId },
+		TransactionUnsigned { multisig: T::AccountId, transaction_id: u32, signer: T::AccountId }, /* TODO: rename to TransactionRevoked in rafac */
 		/// A new owner was added to a multisig
 		OwnerAdded { multisig: T::AccountId, new_owner: T::AccountId },
 		/// Requirement of a multisig was changed
@@ -194,8 +188,6 @@ pub mod pallet {
 	/// https://paritytech.github.io/polkadot-sdk/master/polkadot_sdk_docs/guides/your_first_pallet/index.html#event-and-error
 	#[pallet::error]
 	pub enum Error<T> {
-		/// Error names should be descriptive.
-		NoneValue,
 		/// Errors should have helpful documentation associated with them.
 		StorageOverflow,
 		/// Threshold must be greater than 0 and less than or equal to the number of owners
@@ -230,55 +222,6 @@ pub mod pallet {
 	/// https://paritytech.github.io/polkadot-sdk/master/polkadot_sdk_docs/guides/your_first_pallet/index.html#dispatchables
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		/// An example dispatchable that takes a singles value as a parameter, writes the value to
-		/// storage and emits an event. This function must be dispatched by a signed extrinsic.
-		pub fn do_something(origin: OriginFor<T>, something: u32) -> DispatchResult {
-			// Check that the extrinsic was signed and get the signer.
-			// This function will return an error if the extrinsic is not signed.
-			// https://paritytech.github.io/polkadot-sdk/master/polkadot_sdk_docs/reference_docs/frame_origin/index.html
-			let who = ensure_signed(origin)?;
-
-			// Update storage.
-			<Something<T>>::put(something);
-
-			// Emit an event.
-			Self::deposit_event(Event::SomethingStored { something, who });
-
-			Ok(())
-		}
-
-		/// An example dispatchable that may throw a custom error.
-		pub fn cause_error(origin: OriginFor<T>) -> DispatchResult {
-			let _who = ensure_signed(origin)?;
-
-			// Read a value from storage.
-			match <Something<T>>::get() {
-				// Return an error if the value has not been set.
-				None => Err(Error::<T>::NoneValue.into()),
-				Some(old) => {
-					// Increment the value read from storage; will error in the event of overflow.
-					let new = old.checked_add(1).ok_or(Error::<T>::StorageOverflow)?;
-					// Update the value in storage with the incremented result.
-					<Something<T>>::put(new);
-					Ok(())
-				},
-			}
-		}
-		// TODO: review and use it in submit_transaction
-		/// An example of re-dispatching a call
-		pub fn redispatch(
-			origin: OriginFor<T>,
-			call: Box<<T as Config>::RuntimeCall>,
-		) -> DispatchResult {
-			let who = ensure_signed(origin)?;
-
-			// Re-dispatch some call on behalf of the caller.
-			let res = call.dispatch(RawOrigin::Signed(who).into());
-
-			// Turn the result from the `dispatch` into our expected `DispatchResult` type.
-			res.map(|_| ()).map_err(|e| e.error)
-		}
-
 		/// Create a new multisig wallet
 		// #[pallet::weight(T::WeightInfo::create_multisig(owners.len() as u32))]
 		pub fn create_multisig(
@@ -724,9 +667,7 @@ pub mod pallet {
 			<Transactions<T>>::insert(multisig, transaction_id, transaction.clone());
 
 			// Execute the call i.e redispatch it
-			let result = transaction
-				.call
-				.dispatch(frame_system::RawOrigin::Signed(multisig.clone()).into()); // redispatching the call on behalf of the multisig
+			let result = transaction.call.dispatch(RawOrigin::Signed(multisig.clone()).into()); // redispatching the call on behalf of the multisig
 
 			// Emit event with the result
 			let dispatch_result = result.map(|_| ()).map_err(|e| e.error);
