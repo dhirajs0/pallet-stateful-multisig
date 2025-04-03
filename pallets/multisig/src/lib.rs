@@ -80,6 +80,7 @@ pub mod pallet {
 
 		/// Filter for allowed calls in multisig transactions
 		type CallFilter: Contains<<Self as frame_system::Config>::RuntimeCall>;
+
 	}
 
 	/// A multisig wallet and its configuration
@@ -228,7 +229,7 @@ pub mod pallet {
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		/// Create a new multisig wallet
-		// #[pallet::weight(T::WeightInfo::create_multisig(owners.len() as u32))]
+		#[pallet::call_index(0)]
 		pub fn create_multisig(
 			origin: OriginFor<T>,
 			owners: Vec<T::AccountId>,
@@ -291,6 +292,7 @@ pub mod pallet {
 		}
 
 		/// Submit a transaction to a multisig
+		#[pallet::call_index(1)]
 		pub fn submit_transaction(
 			origin: OriginFor<T>,
 			multisig: T::AccountId,
@@ -350,6 +352,7 @@ pub mod pallet {
 		}
 
 		/// Confirm a multisig transaction
+		#[pallet::call_index(2)]
 		pub fn confirm_transaction(
 			origin: OriginFor<T>,
 			multisig: T::AccountId,
@@ -396,6 +399,7 @@ pub mod pallet {
 		}
 
 		/// Revoke a previous confirmation
+		#[pallet::call_index(3)]
 		pub fn revoke_confirmation(
 			origin: OriginFor<T>,
 			multisig: T::AccountId,
@@ -435,6 +439,7 @@ pub mod pallet {
 		}
 
 		/// Add a new owner to a multisig
+		#[pallet::call_index(4)]
 		pub fn add_owner(
 			origin: OriginFor<T>,
 			multisig: T::AccountId,
@@ -476,6 +481,7 @@ pub mod pallet {
 		}
 
 		/// Remove an owner from the multisig
+		#[pallet::call_index(5)]
 		pub fn remove_owner(
 			origin: OriginFor<T>,
 			multisig: T::AccountId,
@@ -517,6 +523,7 @@ pub mod pallet {
 		}
 
 		/// Replace an owner in the multisig
+		#[pallet::call_index(6)]
 		pub fn replace_owner(
 			origin: OriginFor<T>,
 			multisig: T::AccountId,
@@ -561,6 +568,7 @@ pub mod pallet {
 		}
 
 		/// Change the required confirmations threshold
+		#[pallet::call_index(7)]
 		pub fn change_requirement(
 			origin: OriginFor<T>,
 			multisig: T::AccountId,
@@ -590,6 +598,7 @@ pub mod pallet {
 		}
 
 		/// Permanently destroy a multisig wallet
+		#[pallet::call_index(8)]
 		pub fn destroy_multisig(origin: OriginFor<T>, multisig: T::AccountId) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 
