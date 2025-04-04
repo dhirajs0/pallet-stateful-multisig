@@ -1,0 +1,23 @@
+flowchart TD
+    A([Start: replace_owner]) --> B{Verify Origin is Multisig}
+    B -->|Not Multisig| C[Error: NotOwner]
+    B -->|Is Multisig| D{Get Multisig Data}
+    D -->|Not Found| E[Error: MultisigNotFound]
+    D -->|Found| F{Old Owner Exists?}
+    F -->|No| G[Error: OwnerNotFound]
+    F -->|Yes| H{New Owner Already Owner?}
+    H -->|Yes| I[Error: AlreadyOwner]
+    H -->|No| J[Replace Old Owner with New Owner]
+    J --> K[Update Multisig Storage]
+    K --> L[Remove Old Owner from Mapping]
+    L --> M[Add New Owner to Mapping]
+    M --> N[Emit OwnerRemoved Event]
+    N --> O[Emit OwnerAdded Event]
+    O --> P([End: Owner Replaced])
+    
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style P fill:#bfb,stroke:#333,stroke-width:2px
+    style C fill:#fbb,stroke:#333,stroke-width:2px
+    style E fill:#fbb,stroke:#333,stroke-width:2px
+    style G fill:#fbb,stroke:#333,stroke-width:2px
+    style I fill:#fbb,stroke:#333,stroke-width:2px

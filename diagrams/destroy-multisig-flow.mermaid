@@ -1,0 +1,19 @@
+flowchart TD
+    A([Start: destroy_multisig]) --> B{Get Multisig Data}
+    B -->|Not Found| C[Error: MultisigNotFound]
+    B -->|Found| D{Verify Caller is Owner}
+    D -->|Not Owner| E[Error: NotAllowedToDissolve]
+    D -->|Is Owner| F{Release Deposit to Creator}
+    F -->|Failed| G[Error: FailedToReleaseDeposit]
+    F -->|Success| H[Remove Multisig from Storage]
+    H --> I[Remove All Owner Mappings]
+    I --> J[Clean Up All Transactions]
+    J --> K[Clean Up All Confirmations]
+    K --> L[Emit MultisigDestroyed Event]
+    L --> M([End: Multisig Destroyed])
+    
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style M fill:#bfb,stroke:#333,stroke-width:2px
+    style C fill:#fbb,stroke:#333,stroke-width:2px
+    style E fill:#fbb,stroke:#333,stroke-width:2px
+    style G fill:#fbb,stroke:#333,stroke-width:2px

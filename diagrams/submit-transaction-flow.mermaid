@@ -1,0 +1,25 @@
+flowchart TD
+    A([Start: submit_transaction]) --> B{Verify Multisig Exists}
+    B -->|Not Found| C[Error: MultisigNotFound]
+    B -->|Found| D{Verify Caller is Owner}
+    D -->|Not Owner| E[Error: NotOwner]
+    D -->|Is Owner| F{Verify Call is Allowed}
+    F -->|Not Allowed| G[Error: CallNotAllowed]
+    F -->|Allowed| H[Get Transaction ID from Counter]
+    H --> I[Increment Transaction Counter]
+    I --> J[Create & Store Transaction]
+    J --> K[Auto-Confirm for Submitter]
+    K --> L[Emit TransactionSubmitted Event]
+    L --> M[Emit TransactionSigned Event]
+    M --> N{Check if Threshold Met}
+    N -->|Not Met| O[Wait for More Confirmations]
+    N -->|Met| P[Execute Transaction]
+    P --> Q[Emit TransactionExecuted Event]
+    Q --> R([End: Transaction Processed])
+    O --> R
+    
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style R fill:#bfb,stroke:#333,stroke-width:2px
+    style C fill:#fbb,stroke:#333,stroke-width:2px
+    style E fill:#fbb,stroke:#333,stroke-width:2px
+    style G fill:#fbb,stroke:#333,stroke-width:2px

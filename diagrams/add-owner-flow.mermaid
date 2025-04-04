@@ -1,0 +1,21 @@
+flowchart TD
+    A([Start: add_owner]) --> B{Verify Origin is Multisig}
+    B -->|Not Multisig| C[Error: NotOwner]
+    B -->|Is Multisig| D{Get Multisig Data}
+    D -->|Not Found| E[Error: MultisigNotFound]
+    D -->|Found| F{New Owner Already Owner?}
+    F -->|Yes| G[Error: AlreadyOwner]
+    F -->|No| H{Max Owners Exceeded?}
+    H -->|Yes| I[Error: TooManyOwners]
+    H -->|No| J[Add New Owner to List]
+    J --> K[Update Multisig Storage]
+    K --> L[Add Owner to Mapping]
+    L --> M[Emit OwnerAdded Event]
+    M --> N([End: Owner Added])
+    
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style N fill:#bfb,stroke:#333,stroke-width:2px
+    style C fill:#fbb,stroke:#333,stroke-width:2px
+    style E fill:#fbb,stroke:#333,stroke-width:2px
+    style G fill:#fbb,stroke:#333,stroke-width:2px
+    style I fill:#fbb,stroke:#333,stroke-width:2px

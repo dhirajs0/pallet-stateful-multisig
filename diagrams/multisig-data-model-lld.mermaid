@@ -1,0 +1,64 @@
+classDiagram
+    class Multisig {
+        +AccountId account_id
+        +BoundedVec~AccountId, MaxOwners~ owners
+        +u32 required
+        +u32 transaction_count
+        +AccountId creator
+        +Balance deposit
+    }
+
+    class Transaction {
+        +RuntimeCall call
+        +bool executed
+    }
+
+    class HoldReason {
+        <<enum>>
+        +Multisig
+    }
+
+    class StorageMaps {
+        +Multisigs: Map~AccountId, Multisig~
+        +MultisigOwners: DoubleMap~AccountId, AccountId, bool~
+        +Transactions: DoubleMap~AccountId, u32, Transaction~
+        +Confirmations: DoubleMap~AccountId, (u32, AccountId), bool~
+        +LastMultisigSeed: Value~u32~
+    }
+
+    class Config {
+        +type RuntimeEvent
+        +type NativeBalance
+        +type RuntimeCall
+        +type MaxOwners: Get~u32~
+        +type MultisigDepositBase: Get~Balance~
+        +type MultisigDepositFactor: Get~Balance~
+        +type CallFilter: Contains~RuntimeCall~
+    }
+
+    class Pallet {
+        +create_multisig(owners, threshold)
+        +submit_transaction(multisig, call)
+        +confirm_transaction(multisig, transaction_id)
+        +revoke_confirmation(multisig, transaction_id)
+        +add_owner(multisig, new_owner)
+        +remove_owner(multisig, old_owner)
+        +replace_owner(multisig, old_owner, new_owner)
+        +change_requirement(multisig, new_threshold)
+        +destroy_multisig(multisig)
+    }
+
+    class HelperFunctions {
+        -multi_account_id(seed)
+        -calculate_deposit(num_owners)
+        -count_confirmations(multisig, transaction_id)
+        -do_execute_transaction(multisig, transaction_id)
+        -ensure_multisig(multisig, origin)
+    }
+
+    Pallet --> Config: configured by
+    Pallet --> StorageMaps: uses
+    Pallet --> HelperFunctions: calls
+    StorageMaps --> Multisig: stores
+    StorageMaps --> Transaction: stores
+    Multisig --> Transaction: "1" to "*"

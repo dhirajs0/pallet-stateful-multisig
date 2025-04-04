@@ -1,0 +1,23 @@
+flowchart TD
+    A([Start: remove_owner]) --> B{Verify Origin is Multisig}
+    B -->|Not Multisig| C[Error: NotOwner]
+    B -->|Is Multisig| D{Get Multisig Data}
+    D -->|Not Found| E[Error: MultisigNotFound]
+    D -->|Found| F{Owner to Remove Exists?}
+    F -->|No| G[Error: OwnerNotFound]
+    F -->|Yes| H[Remove Owner from List]
+    H --> I{New Threshold > Owner Count?}
+    I -->|Yes| J[Adjust Threshold Downward]
+    I -->|No| K[Keep Current Threshold]
+    J --> L[Emit RequirementChanged Event]
+    K --> M[Update Multisig Storage]
+    L --> M
+    M --> N[Remove Owner from Mapping]
+    N --> O[Emit OwnerRemoved Event]
+    O --> P([End: Owner Removed])
+    
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style P fill:#bfb,stroke:#333,stroke-width:2px
+    style C fill:#fbb,stroke:#333,stroke-width:2px
+    style E fill:#fbb,stroke:#333,stroke-width:2px
+    style G fill:#fbb,stroke:#333,stroke-width:2px

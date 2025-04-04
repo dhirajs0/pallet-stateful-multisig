@@ -1,0 +1,22 @@
+flowchart TD
+    A([Start: create_multisig]) --> B{Validate Parameters}
+    B -->|Invalid| C[Error: InvalidThreshold, TooManyOwners]
+    B -->|Valid| D{Check for Duplicate Owners}
+    D -->|Duplicates Found| E[Error: AlreadyOwner]
+    D -->|No Duplicates| F[Generate Unique Multisig Account ID]
+    F --> G[Calculate Required Deposit]
+    G --> H{Hold Deposit from Creator}
+    H -->|Failed| I[Error: FailedToReserveDeposit]
+    H -->|Success| J[Create Multisig Data Structure]
+    J --> K[Store Multisig in Storage]
+    K --> L[Map Each Owner to Multisig]
+    L --> M[Emit MultisigCreated Event]
+    M --> N([End: Multisig Created])
+    
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style N fill:#bfb,stroke:#333,stroke-width:2px
+    style C fill:#fbb,stroke:#333,stroke-width:2px
+    style E fill:#fbb,stroke:#333,stroke-width:2px
+    style I fill:#fbb,stroke:#333,stroke-width:2px
+
+

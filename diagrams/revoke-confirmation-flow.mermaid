@@ -1,0 +1,22 @@
+flowchart TD
+    A([Start: revoke_confirmation]) --> B{Verify Multisig Exists}
+    B -->|Not Found| C[Error: MultisigNotFound]
+    B -->|Found| D{Verify Caller is Owner}
+    D -->|Not Owner| E[Error: NotOwner]
+    D -->|Is Owner| F{Verify Transaction Exists}
+    F -->|Not Found| G[Error: TransactionNotFound]
+    F -->|Found| H{Transaction Already Executed?}
+    H -->|Yes| I[Error: AlreadyExecuted]
+    H -->|No| J{Has Caller Confirmed?}
+    J -->|No| K[Error: NotConfirmed]
+    J -->|Yes| L[Remove Confirmation]
+    L --> M[Emit TransactionRevoked Event]
+    M --> N([End: Confirmation Revoked])
+    
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style N fill:#bfb,stroke:#333,stroke-width:2px
+    style C fill:#fbb,stroke:#333,stroke-width:2px
+    style E fill:#fbb,stroke:#333,stroke-width:2px
+    style G fill:#fbb,stroke:#333,stroke-width:2px
+    style I fill:#fbb,stroke:#333,stroke-width:2px
+    style K fill:#fbb,stroke:#333,stroke-width:2px
