@@ -17,14 +17,15 @@ The implementation aims to provide a robust, production-ready solution that coul
 ## Table of Contents
 
 - [Overview](#overview)
-- [Key Features](#key-features)
-- [Architecture](#architecture)
-- [State Transition Function](#state-transition-function)
-- [How to Run](#how-to-run)
+- [Sequence Diagrams](#sequence-diagrams)
+- [High-Level Design](#high-level-design)
+- [Low-Level Design](#low-level-design)
+- [Design Decision Analysis and Trade-offs](#design-decision-analysis-and-trade-offs)
 - [Testing](#testing)
-- [Implementation Considerations](#implementation-considerations)
-- [Future Improvements](#future-improvements)
-- [Project Option](#project-option)
+- [Migration Story](#migration-story)
+- [Best Practices](#best-practices)
+- [Rust Docs](#rust-docs)
+- [How to Run](#how-to-run) 
 
 ## Overview
 
@@ -662,14 +663,22 @@ The pallet's state transition function is composed of several key extrinsics:
    - Effects: Removes all multisig data, transfers any remaining funds
    - Guard: Must be called through an approved multisig transaction
 
-## Testing: Check the [testing.md](testing.md) file for more details
+## Testing
+
+Check the [testing.md](testing.md) file for more details
 
 
-## Migration Story: Check the [MIGRATION_STORY.md](MIGRATION_STORY.md) file for more details
+## Migration Story
 
-## Best Practices: Check the [best_practices.md](best_practices.md) file for more details
+Check the [MIGRATION_STORY.md](MIGRATION_STORY.md) file for more details
 
-## TO get the rust docs run the following command:
+## Best Practices : 
+
+Check the [best_practices.md](best_practices.md) file for more details
+
+## Rust Docs :
+
+To get the rust docs run the following command:
 
 ```bash
 cargo doc --open --document-private-items --no-deps
