@@ -1,6 +1,6 @@
 use crate as pallet_multisig;
 use crate::{mock::*, *};
-use frame_support::{assert_noop, assert_ok};
+use frame_support::{assert_noop, assert_ok, traits::fungible::Mutate};
 
 /// Tests for owner management extrinsics (add_owner, remove_owner, replace_owner)
 /// This module tests the management of multisig owners, including proper storage updates,
@@ -98,7 +98,6 @@ fn add_owner_fails_when_owner_already_exists() {
 }
 
 #[test]
-#[ignore = "Deposit reservation failure needs to be fixed"]
 fn add_owner_fails_when_max_owners_reached() {
 	new_test_ext().execute_with(|| {
 		System::set_block_number(1);
@@ -106,6 +105,10 @@ fn add_owner_fails_when_max_owners_reached() {
 		let owners: Vec<u64> = (1..=50).collect();
 		let threshold = 2;
 		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
+
+		// Fund account 1 with enough balance for the deposit
+		// Base deposit (100) + (50 owners * 50 per owner) = 2600
+		pallet_balances::Pallet::<Test>::set_balance(&1, 10000);
 
 		// Create multisig
 		assert_ok!(pallet_multisig::Pallet::<Test>::create_multisig(
