@@ -10,3 +10,6 @@ multisig-pba/
 substrate-front-end-template/
 package-lock.json
 package.json
+substrate_front_end_notes.md
+curl_cmd.sh
+

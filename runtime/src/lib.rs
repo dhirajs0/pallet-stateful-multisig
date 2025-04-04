@@ -6,7 +6,7 @@ use frame::{
 		frame_support::{
 			genesis_builder_helper::{build_state, get_preset},
 			runtime,
-			traits::AsEnsureOriginWithArg,
+			traits::{AsEnsureOriginWithArg, Contains},
 			weights::FixedFee,
 		},
 	},
@@ -175,15 +175,43 @@ impl pallet_assets::Config for Runtime {
 	type BenchmarkHelper = ();
 }
 
+pub struct MultisigCallFilter;
+impl Contains<RuntimeCall> for MultisigCallFilter {
+	fn contains(c: &RuntimeCall) -> bool {
+		match *c {
+			// Allow balance operations
+			RuntimeCall::Balances(_) => true,
+
+			// Allow system remark (metadata)
+			RuntimeCall::System(frame_system::Call::remark { .. }) => true,
+
+			// Block dangerous system calls and sudo operations
+			RuntimeCall::System(frame_system::Call::set_code { .. }) | RuntimeCall::Sudo(_) =>
+				false,
+
+			// Block by default (whitelist approach)
+			_ => false,
+		}
+	}
+}
+
+parameter_types! {
+	pub const MultisigDepositBase: Balance = 100;
+	pub const MultisigDepositFactor: Balance = 50;
+	pub const MaxOwners: u32 = 50;
+}
+
 /// Configure the pallet-multisig in pallets/multisig.
 impl pallet_multisig::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type NativeBalance = Balances;
 	type RuntimeCall = RuntimeCall;
-	type MaxOwners = ConstU32<50>; // TODO: review - explore parameter_types!
 
-	type MultisigDepositBase = ConstU128<100>;
-	type MultisigDepositFactor = ConstU128<10>;
+	type MaxOwners = MaxOwners;
+	type MultisigDepositBase = MultisigDepositBase;
+	type MultisigDepositFactor = MultisigDepositFactor;
+
+	type CallFilter = MultisigCallFilter;
 }
 
 /// Configure the pallet-free-tx in pallets/free-tx.
@@ -368,8 +396,8 @@ impl_runtime_apis! {
 	}
 
 	impl pallet_transaction_payment_rpc_runtime_api::TransactionPaymentApi<
-		Block,
-		Balance,
+			Block,
+			Balance,
 	> for Runtime {
 		fn query_info(uxt: ExtrinsicFor<Runtime>, len: u32) -> RuntimeDispatchInfo<Balance> {
 			TransactionPayment::query_info(uxt, len)
