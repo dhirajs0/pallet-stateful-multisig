@@ -19,7 +19,7 @@ pub mod pallet {
 	use frame_support::{
 		dispatch::{GetDispatchInfo, RawOrigin},
 		pallet_prelude::*,
-		traits::{fungible, fungible::MutateHold, Contains, VariantCount},
+		traits::{fungible, fungible::MutateHold, tokens::Precision, Contains, VariantCount},
 	};
 	use frame_system::pallet_prelude::*;
 	use sp_io::hashing::blake2_256;
@@ -97,6 +97,10 @@ pub mod pallet {
 		pub required: u32,
 		/// Transaction count
 		pub transaction_count: u32,
+		/// to track who created the multisig and paid the deposit
+		pub creator: T::AccountId,
+		/// The deposit paid by the creator
+		pub deposit: BalanceOf<T>,
 	}
 
 	// Implement Clone manually to ensure proper trait bounds
@@ -107,6 +111,8 @@ pub mod pallet {
 				owners: self.owners.clone(),
 				required: self.required,
 				transaction_count: self.transaction_count,
+				creator: self.creator.clone(),
+				deposit: self.deposit,
 			}
 		}
 	}
@@ -222,6 +228,8 @@ pub mod pallet {
 		NotAllowedToDissolve,
 		/// Call is not allowed by the multisig filter
 		CallNotAllowed,
+		/// Failed to release deposit
+		FailedToReleaseDeposit,
 	}
 
 	/// Dispatchable functions allows users to interact with the pallet and invoke state changes.
@@ -273,6 +281,8 @@ pub mod pallet {
 				owners: owners_bounded.clone(),
 				required: threshold,
 				transaction_count: 0,
+				creator: creator.clone(),
+				deposit,
 			};
 
 			// Store the multisig
@@ -613,6 +623,15 @@ pub mod pallet {
 				<MultisigOwners<T>>::contains_key(&multisig, &who),
 				Error::<T>::NotAllowedToDissolve
 			);
+
+			// Release the exact deposit that was held
+			T::NativeBalance::release(
+				&HoldReason::Multisig,
+				&multisig_data.creator,
+				multisig_data.deposit,
+				Precision::Exact,
+			)
+			.map_err(|_| Error::<T>::FailedToReleaseDeposit)?;
 
 			// Remove all storage items related to this multisig
 			<Multisigs<T>>::remove(&multisig);
