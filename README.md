@@ -669,6 +669,12 @@ The pallet's state transition function is composed of several key extrinsics:
 
 ## Best Practices: Check the [best_practices.md](best_practices.md) file for more details
 
+## TO get the rust docs run the following command:
+
+```bash
+cargo doc --open --document-private-items --no-deps
+```
+
 ## How to Run
 
 ### Prerequisites
@@ -676,43 +682,74 @@ The pallet's state transition function is composed of several key extrinsics:
 - Rust and Cargo
 - Substrate development environment
 
-### Installation
 
-1. Clone the repository:
+### Entire Runtime
+
+#### Using `omni-node`
+
+First, make sure to install the special omni-node of the PBA assignment, if you have not done so
+already from the previous activity.
+
+```sh
+cargo install polkadot-omni-node --locked
+cargo install staging-chain-spec-builder --locked
+```
+
+Clone the repository:
 
 ```bash
 git clone https://github.com/pba-private/pba-lucerne-protocol-onchain-assignment-dhirajs0.git
 cd pba-lucerne-protocol-onchain-assignment-dhirajs0
 ```
 
-2. Build the node:
+Then build your runtime Wasm:
 
-```bash
-run the build.sh script to build the node
+```sh
+cargo build -p pba-runtime --release
 ```
+You can also run the build.sh script to build the node
 
-3. Create a chain spec:
+Then create a chain-spec from that Wasm file:
 
-```bash
+```sh
 chain-spec-builder create --runtime ./target/release/wbuild/pba-runtime/pba_runtime.wasm --relay-chain westend --para-id 1000 default
 ```
 
-4. Run a development node:
+Then load that chain-spec into the omninode:
 
-```bash
+```sh
 polkadot-omni-node --chain chain_spec.json --dev-block-time 6000 --tmp
 ```
 
-### Interacting with the Pallet
+Populate your chain-spec file then with more accounts, like:
 
-1. Connect to the node with the Polkadot.js Apps UI: https://polkadot.js.org/apps/
-2. Go to Developer -> Extrinsics -> multisig
-3. Select the desired operation (create_multisig, propose, approve, etc.)
-4. Fill in the required parameters and submit the transaction
+```json
+"balances": {
+  "balances": [
+    ["5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", 100000000000],
+    ["5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty", 100000000000],
+    ["5FLSigC9HGRKVhB9FiEo4Y3koPsNmBmLJbpXg2mp1hXcS59Y", 100000000000],
+    ["5DAAnrj7VHTznn2AWBemMuyBwZWs6FNFjdyVXUeYum3PTXFy", 100000000000],
+    ["5HGjWAeFDfFCWPsjFQdVV2Msvz2XtMktvgocEZcCj68kUMaw", 100000000000],
+    ["5CiPPseXPECbkjWCa6MnjNokrgYjMqmKndv2rSnekmSK2DjL", 100000000000],
+    ["5GNJqTPyNqANBkUVMN1LPPrxXnFouWXoe2wNSmmEoLctxiZY", 100000000000],
+    ["5HpG9w8EBLe5XCrbczpwq5TSXvedjrBGCwqxK1iQ7qUsSWFc", 100000000000],
+    ["5Ck5SLSHYac6WFt5UZRSsdJjwmpSZq85fd5TRNAdZQVzEAPT", 100000000000],
+    ["5HKPmK9GYtE1PSLsS1qiYU9xQ9Si1NcEhdeCq9sw5bqu4ns8", 100000000000],
+    ["5FCfAonRZgTFrTd9HREEyeJjDpT397KMzizE6T3DvebLFE7n", 100000000000],
+    ["5CRmqmsiNFExV6VbdmPJViVxrWmkaXXvBrSX8oqBT8R9vmWk", 100000000000],
+    ["5Fxune7f71ZbpP2FoY3mhYcmM596Erhv1gRue4nsPwkxMR4n", 100000000000],
+    ["5CUjxa4wVKMj3FqKdqAUf7zcEMr4MYAjXeWmUf44B41neLmJ", 100000000000]
+  ]
+}
+```
 
-## Future Improvements
+And more details like:
 
-With additional time, I would implement:
-
-1. **UI Integration**: A dedicated UI for multisig management. Was not able to implement it due to time constraints.
-
+```json
+"chainType": "Development"
+"properties": {
+  "tokenDecimals": 1,
+  "tokenSymbol": "PBA"
+}
+```
