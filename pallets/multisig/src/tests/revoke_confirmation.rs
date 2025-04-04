@@ -60,12 +60,11 @@ fn revoke_confirmation_works_for_submitter() {
 }
 
 #[test]
-#[ignore = "Transaction already executed issue needs to be fixed"]
 fn revoke_confirmation_works_for_other_owner() {
 	new_test_ext().execute_with(|| {
 		System::set_block_number(1);
 		let owners = vec![1, 2, 3];
-		let threshold = 2;
+		let threshold = 3;
 		let multisig = pallet_multisig::Pallet::<Test>::multi_account_id(0);
 
 		// Create multisig and submit transaction
