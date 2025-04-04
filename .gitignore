@@ -6,3 +6,7 @@ notes.md
 .config/
 ./Test_dir/
 ./.maintain/frame-weight-template.hbs
+multisig-pba/
+substrate-front-end-template/
+package-lock.json
+package.json
