@@ -1,0 +1,31 @@
+sequenceDiagram
+    participant Alice
+    participant Bob
+    participant Charlie
+    participant MultisigPallet
+    participant Runtime
+    
+    Alice->>MultisigPallet: create_multisig([Alice,Bob,Charlie], threshold=2)
+    MultisigPallet-->>Alice: MultisigCreated event
+    Note right of MultisigPallet: Multisig account created
+    
+    Note over Alice,MultisigPallet: Later...
+    
+    Alice->>MultisigPallet: submit_transaction(multisig, transfer_funds(to=Dave, amount=100))
+    MultisigPallet-->>Alice: TransactionSubmitted & TransactionSigned events
+    Note right of MultisigPallet: Submission counts as auto-confirmation
+    
+    Bob->>MultisigPallet: confirm_transaction(multisig, transaction_id)
+    MultisigPallet-->>Bob: TransactionSigned event
+    Note right of MultisigPallet: Threshold reached (2/3)
+    
+    MultisigPallet->>Runtime: dispatch(transfer_funds(to=Dave, amount=100))
+    Runtime-->>MultisigPallet: execution_result
+    MultisigPallet-->>Bob: TransactionExecuted event
+    
+    Note over Charlie,MultisigPallet: Management Example...
+    
+    Alice->>MultisigPallet: submit_transaction(multisig, add_owner(multisig, Dave))
+    Bob->>MultisigPallet: confirm_transaction(multisig, transaction_id)
+    MultisigPallet->>Runtime: dispatch(add_owner(multisig, Dave))
+    MultisigPallet-->>Bob: OwnerAdded event
