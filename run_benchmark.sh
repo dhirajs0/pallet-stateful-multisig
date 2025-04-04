@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# run the build script
+./build.sh
+
 # Build the runtime with benchmarks enabled
 cargo build -p pba-runtime --release --features runtime-benchmarks
 
@@ -10,12 +13,6 @@ mkdir -p ./pallets/multisig/src/
 if [ ! -f target/release/wbuild/pba-runtime/pba_runtime.compact.compressed.wasm ]; then
   echo "Error: Wasm file not found at target/release/wbuild/pba-runtime/pba_runtime.compact.compressed.wasm"
   echo "Please build your runtime first."
-  exit 1
-fi
-
-# Check that the template file exists
-if [ ! -f ./.maintain/frame-weight-template.hbs ]; then
-  echo "Error: Template file not found at ./.maintain/frame-weight-template.hbs"
   exit 1
 fi
 
