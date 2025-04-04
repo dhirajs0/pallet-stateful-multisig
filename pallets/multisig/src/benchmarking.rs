@@ -210,6 +210,79 @@ mod benchmarks {
 		);
 	}
 
+    /// Benchmark for `confirm_transaction` extrinsic.
+	///
+	/// This benchmark measures the performance of confirming a transaction
+	/// in a multisig with varying numbers of owners.
+	///
+	/// Parameters:
+	/// - o: Number of owners in the multisig
+	/// - c: Number of confirmations already made (excluding the new one)
+	#[benchmark]
+	fn confirm_transaction(
+		o: Linear<3, { T::MaxOwners::get() }>, // Number of owners
+		c: Linear<0, 100>,                     // Percentage of required confirmations already made
+	) {
+		// SETUP PHASE: Create a multisig and a transaction
+
+		// 1. Create a multisig with o owners and threshold that's at least 2
+		// (We need at least 2 for confirmation to make sense - one to submit, one to confirm)
+		let threshold = core::cmp::max(2, o / 2);
+		let (multisig_account, _, owners) = create_multisig_for_benchmark::<T>(o, threshold);
+
+		// 2. First owner submits a transaction
+		let submitter = owners[0].clone();
+		let call = create_benchmark_call::<T>();
+		let transaction_id =
+			submit_transaction_for_benchmark::<T>(&multisig_account, &submitter, call);
+
+		// 3. Calculate how many confirmations to add based on c parameter
+		// c is a percentage of threshold-1 (excluding the submitter who already confirmed)
+		let max_confirmations = threshold - 1; // How many more needed for execution
+		let confirmations_to_add = (max_confirmations as u128 * c as u128 / 100) as u32;
+
+		// 4. Add the calculated number of confirmations, but ensure we don't reach threshold
+		for i in 1..=confirmations_to_add {
+			if i < max_confirmations { // Only add confirmations if we won't reach threshold
+				assert!(Multisig::<T>::confirm_transaction(
+					RawOrigin::Signed(owners[i as usize].clone()).into(),
+					multisig_account.clone(),
+					transaction_id
+				)
+				.is_ok());
+			}
+		}
+
+		// 5. Select the next unconfirmed owner as the confirmer
+		let confirmer = owners[(confirmations_to_add + 1) as usize].clone();
+
+		// EXECUTION PHASE: Execute the extrinsic being benchmarked
+		#[extrinsic_call]
+		confirm_transaction(
+			RawOrigin::Signed(confirmer.clone()),
+			multisig_account.clone(),
+			transaction_id,
+		);
+
+		// VERIFICATION PHASE
+
+		// Check that the confirmation was recorded
+		assert!(
+			Confirmations::<T>::contains_key(&multisig_account, (transaction_id, confirmer)),
+			"Confirmation not recorded"
+		);
+
+		// Check if the transaction was executed (if we reached the threshold)
+		let txn = Transactions::<T>::get(&multisig_account, transaction_id).unwrap();
+		let current_confirmations = confirmations_to_add + 2; // +1 for original submitter, +1 for this confirmation
+		assert_eq!(
+			txn.executed,
+			current_confirmations >= threshold,
+			"Transaction execution status incorrect"
+		);
+	}
+
+
 	/// Benchmark for `revoke_confirmation` extrinsic.
 	///
 	/// This benchmark measures the performance of revoking a previously
