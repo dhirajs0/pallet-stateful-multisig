@@ -8,7 +8,6 @@ use frame_support::{assert_noop, assert_ok};
 /// It also verifies the execution of transactions when the threshold is reached.
 
 #[test]
-#[ignore = "Event order issue needs to be fixed"]
 fn confirm_transaction_works() {
 	new_test_ext().execute_with(|| {
 		System::set_block_number(1);
@@ -49,7 +48,7 @@ fn confirm_transaction_works() {
 		assert_eq!(Confirmations::<Test>::get(&multisig, (0, 2)), Some(true));
 
 		// Verify event
-		System::assert_last_event(
+		System::assert_has_event(
 			Event::TransactionSigned { multisig, transaction_id: 0, signer: 2 }.into(),
 		);
 	});
