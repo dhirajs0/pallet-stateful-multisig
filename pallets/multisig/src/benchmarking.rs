@@ -210,7 +210,7 @@ mod benchmarks {
 		);
 	}
 
-    /// Benchmark for `confirm_transaction` extrinsic.
+	/// Benchmark for `confirm_transaction` extrinsic.
 	///
 	/// This benchmark measures the performance of confirming a transaction
 	/// in a multisig with varying numbers of owners.
@@ -243,7 +243,8 @@ mod benchmarks {
 
 		// 4. Add the calculated number of confirmations, but ensure we don't reach threshold
 		for i in 1..=confirmations_to_add {
-			if i < max_confirmations { // Only add confirmations if we won't reach threshold
+			if i < max_confirmations {
+				// Only add confirmations if we won't reach threshold
 				assert!(Multisig::<T>::confirm_transaction(
 					RawOrigin::Signed(owners[i as usize].clone()).into(),
 					multisig_account.clone(),
@@ -281,7 +282,6 @@ mod benchmarks {
 			"Transaction execution status incorrect"
 		);
 	}
-
 
 	/// Benchmark for `revoke_confirmation` extrinsic.
 	///

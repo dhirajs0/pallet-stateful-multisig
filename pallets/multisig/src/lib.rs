@@ -71,7 +71,7 @@ pub mod pallet {
 
 		/// The maximum number of owners per multisig.
 		#[pallet::constant]
-		type MaxOwners: Get<u32>; // TODO: review
+		type MaxOwners: Get<u32>;
 
 		/// Base deposit for creating a multisig
 		#[pallet::constant]
@@ -184,8 +184,8 @@ pub mod pallet {
 		TransactionExecuted { multisig: T::AccountId, transaction_id: u32, result: DispatchResult },
 		/// A transaction was signed by an owner
 		TransactionSigned { multisig: T::AccountId, transaction_id: u32, signer: T::AccountId },
-		/// A transaction was unsigned by an owner
-		TransactionUnsigned { multisig: T::AccountId, transaction_id: u32, signer: T::AccountId }, /* TODO: rename to TransactionRevoked in rafac */
+		/// A transaction was revoked by an owner
+		TransactionRevoked { multisig: T::AccountId, transaction_id: u32, signer: T::AccountId },
 		/// A new owner was added to a multisig
 		OwnerAdded { multisig: T::AccountId, new_owner: T::AccountId },
 		/// Requirement of a multisig was changed
@@ -441,7 +441,7 @@ pub mod pallet {
 			<Confirmations<T>>::remove(&multisig, (transaction_id, who.clone()));
 
 			// Emit revocation event
-			Self::deposit_event(Event::TransactionUnsigned {
+			Self::deposit_event(Event::TransactionRevoked {
 				multisig,
 				transaction_id,
 				signer: who,

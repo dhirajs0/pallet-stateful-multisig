@@ -46,7 +46,7 @@ fn revoke_confirmation_works_for_submitter() {
 
 		// Verify event
 		System::assert_last_event(
-			Event::TransactionUnsigned { multisig, transaction_id: 0, signer: 1 }.into(),
+			Event::TransactionRevoked { multisig, transaction_id: 0, signer: 1 }.into(),
 		);
 
 		// Verify can confirm again after revoking
@@ -105,7 +105,7 @@ fn revoke_confirmation_works_for_other_owner() {
 
 		// Verify event
 		System::assert_last_event(
-			Event::TransactionUnsigned { multisig, transaction_id: 0, signer: 2 }.into(),
+			Event::TransactionRevoked { multisig, transaction_id: 0, signer: 2 }.into(),
 		);
 
 		// Verify can confirm again after revoking
