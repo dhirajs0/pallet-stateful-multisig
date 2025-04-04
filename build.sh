@@ -16,3 +16,6 @@ RUST_BACKTRACE=1 cargo test -p pallet-multisig
 cargo build -p pba-runtime --release
 
 echo "Build completed successfully!"
+
+
+# polkadot-omni-node --chain chain_spec.json --dev-block-time 6000 --tmp
